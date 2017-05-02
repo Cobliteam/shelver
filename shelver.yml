@@ -1,0 +1,86 @@
+defaults:
+  environment: prod
+  template_path: packer-template.yml
+  archive:
+    type: git
+    dir: ../ansible
+  instance_type: t2.micro
+  metadata:
+    - |
+      #cloud-config
+      hostname: $INSTANCE_ID
+      users:
+        - default
+      package_upgrade: yes
+      packages:
+        - sudo
+        - build-essential
+        - python-pip
+        - python-dev
+        - libffi-dev
+        - libssl-dev
+        - virtualenv
+      runcmd:
+        - pip install awscli boto
+
+base-16.04:
+  version: "1.0.0"
+  description: Cobli Base Image
+  provision:
+    playbook: playbooks/base.yml
+    groups: all
+    bootstrap_on_boot: no
+  builder_opts:
+    source_ami_filter:
+      filters:
+        virtualization-type: hvm
+        name: '*ubuntu-xenial-16.04-amd64-server-*'
+        root-device-type: ebs
+      owners: [099720109477]
+      most_recent: true
+
+zeppelin:
+  version: "1.0.0"
+  base: base-16.04
+  description: zeppelin
+  provision:
+    playbook: playbooks/zeppelin.yml
+    groups: [zeppelin_servers]
+    bootstrap_on_boot: no
+
+spark-worker:
+  base: base-16.04
+  version: "1.0.0"
+  description: Spark Worker
+  provision:
+    playbook: playbooks/spark-worker.yml
+    groups: [spark_worker_servers]
+    bootstrap_on_boot: yes
+  builder_opts:
+    ami_block_device_mappings:
+      - device_name: /dev/xvdb
+        volume_type: gp2
+        volume_size: 100
+        delete_on_termination: yes
+  metadata:
+    - &spark_mount |
+      #cloud-config
+      mounts:
+        - [xvdb, /mnt/spark, auto, defaults]
+
+spark-master:
+  base: base-16.04
+  version: "1.0.0"
+  description: Spark Master
+  provision:
+    playbook: playbooks/spark-master.yml
+    groups: [spark_master_servers]
+    bootstrap_on_boot: yes
+  builder_opts:
+    ami_block_device_mappings:
+      - device_name: /dev/xvdb
+        volume_type: gp2
+        volume_size: 300
+        delete_on_termination: yes
+  metadata:
+    - *spark_mount

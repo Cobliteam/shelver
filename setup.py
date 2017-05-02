@@ -1,0 +1,28 @@
+from setuptools import setup
+
+VERSION = '0.1'
+
+setup(name='shelver',
+      packages=['shelver'],
+      version=VERSION,
+      description="Continuous deployment assistant to Hashicorp's Packer",
+      long_description=open('README.rst').read(),
+      url='https://github.com/Cobliteam/shelver',
+      download_url='https://github.com/Cobliteam/shelver/archive/{}.tar.gz'.format(VERSION),
+      author='Daniel Miranda',
+      author_email='daniel@cobli.co',
+      license='MPL2',
+      install_requires=[
+          'pyyaml',
+          'future',
+          'Jinja2',
+          'boto3',
+          'sortedcontainers',
+          'icicle',
+          'colored',
+          'subprocess32; python_version < "3"',
+          'selectors2; python_version < "3"',
+          'backports.functools_lru_cache; python_version < "3"'
+      ],
+      scripts=['bin/shelver'],
+      keywords='packer aws ami cloud cd continuous-deployment')

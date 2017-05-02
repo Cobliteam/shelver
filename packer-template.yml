@@ -1,0 +1,46 @@
+builders:
+  - type: amazon-ebs
+    region: "{{ aws_region | default('us-east-1') }}"
+    iam_instance_profile: "{{ instance_profile | default }}"
+    instance_type: "{{ instance_type }}"
+    ssh_username: ubuntu
+    ami_name: "{{ name }}-v{{ version }}"
+    ami_description: "{{ description }}"
+    tags: &tags
+      ImageName: "{{ name }}"
+      ImageVersion: "{{ version }}"
+      ImageCommit: "{{ repo_commit }}"
+    run_tags:
+      <<: *tags
+      PackerBuild: "true"
+    user_data_file: "{{ user_data_file }}"
+    source_ami: "{{ base_artifact.id | default }}"
+provisioners:
+  - type: file
+    source: "{{ repo_archive }}"
+    destination: /tmp/provision.tar.xz
+  - type: shell
+    inline:
+      - sleep 30
+      - sudo mkdir -p /var/lib/provision
+      - sudo tar x -C /var/lib/provision/ --owner=root --group=root -f /tmp/provision.tar.xz
+      - sudo chmod ug=rwX,o= /var/lib/provision
+      - >-
+        while [ ! -f /var/lib/cloud/instance/boot-finished ]; do
+          echo 'Waiting for cloud-init...'
+          sleep 5
+        done
+      - >-
+        sudo -H /var/lib/provision/scripts/ami_provision
+        -n "{{ name }}"
+        -p "{{ provision.playbook }}"
+        -g "{{ provision.groups | join(',') }}"
+        -e "{{ environment }}"
+        {% if provision.bootstrap_on_boot | default %}-b{% endif %}
+      - rm /tmp/provision.tar.xz
+      - >-
+        {% if not provision.bootstrap_on_boot | default %}
+        sudo rm -rf /var/lib/provision /etc/ansible
+        {% else %}
+        true
+        {% endif %}
