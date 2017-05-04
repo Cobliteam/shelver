@@ -24,7 +24,6 @@ except ImportError:
     from selectors2 import DefaultSelector
 
 import yaml
-import colored
 from jinja2 import Template
 from icicle import FrozenDictEncoder
 from shelver.archive import Archive

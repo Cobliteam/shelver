@@ -19,7 +19,6 @@ setup(name='shelver',
           'boto3',
           'sortedcontainers',
           'icicle',
-          'colored',
           'subprocess32; python_version < "3"',
           'selectors2; python_version < "3"',
           'backports.functools_lru_cache; python_version < "3"'
