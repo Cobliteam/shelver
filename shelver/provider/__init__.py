@@ -1,3 +1,5 @@
+from __future__ import absolute_import, unicode_literals
+
 from shelver.registry import Registry
 from shelver.artifact import Artifact
 from shelver.builder import Builder
