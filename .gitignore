@@ -99,3 +99,7 @@ ENV/
 
 # shelver
 .shelver
+
+# IntelliJ
+*.iml
+.idea
