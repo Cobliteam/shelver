@@ -1,7 +1,8 @@
 from __future__ import absolute_import, unicode_literals
-from future.utils import iteritems
+from future.utils import iteritems, with_metaclass
 
-from collections import defaultdict
+from abc import ABCMeta, abstractmethod
+from collections import defaultdict, deque
 from itertools import groupby
 
 import yaml
@@ -13,7 +14,7 @@ from shelver.artifact import Artifact
 from shelver.util import topological_sort
 
 
-class Registry(object):
+class Registry(with_metaclass(ABCMeta, object)):
     version_key = LooseVersion
 
     def __init__(self, provider, image_config):
@@ -24,6 +25,10 @@ class Registry(object):
         self._image_set = frozenset(images.values())
         self._versions = defaultdict(lambda: SortedDict(self.version_key))
         self._artifacts = {}
+
+    @abstractmethod
+    def load_artifact_by_id(self, id, region=None, image=None):
+        raise NotImplementedError
 
     @property
     def images(self):
@@ -61,6 +66,8 @@ class Registry(object):
 
         if not name:
             name = artifact.name
+            if artifact.version:
+                name += ':' + artifact.version
 
         existing = self._artifacts.get(name)
         if existing:
@@ -132,17 +139,22 @@ class Registry(object):
         return base_artifact
 
     def build_order(self, filter_by=None):
-        images = set(filter(filter_by, self._image_set))
+        images = set()
+        to_visit = deque(filter(filter_by, self._image_set))
         edges = {}
 
-        for image in images:
+        while to_visit:
+            image = to_visit.popleft()
+            if image in images:
+                continue
+
+            images.add(image)
             base_image = image.base and self.get_image(image.base)
             if not base_image:
                 continue
 
-            # Make sure we add parent images even if they were filtered out
-            images.add(base_image)
             edges[image] = [base_image]
+            to_visit.append(base_image)
 
         ordered_images = topological_sort(images, edges)
         groups = groupby(ordered_images, lambda (i, _): i)
