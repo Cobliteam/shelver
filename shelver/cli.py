@@ -1,4 +1,4 @@
-from __future__ import absolute_import, print_function
+from __future__ import absolute_import, print_function, unicode_literals
 
 import os
 import argparse
@@ -52,7 +52,7 @@ def main():
 
     args = argparse.ArgumentParser(description='Cloud compute image continuous '
                                                'delivery assistant for Packer')
-    args.add_argument('-p', '--provider', metavar='PROVIDER', required=True,
+    args.add_argument('-p', '--provider', metavar='PROVIDER',
         choices=Provider.available_names())
     args.add_argument('-d', '--base-dir', metavar='DIR',
         help='Base directory to make paths in the config relative to. '
@@ -61,6 +61,8 @@ def main():
     args.add_argument('-c', '--config', metavar='FILE', default='shelver.yml',
         help='Path to configuration file in YAML/Jinja format. '
              'YAML values are templated using Jinja instead of the whole file')
+    args.add_argument('-r', '--region', metavar='region',
+        help='Use non-default region for providers that support it')
     args.add_argument('--tmp-dir', metavar='DIR',
         help='Override path to store temporary files into')
     args.add_argument('--cache-dir', metavar='DIR',
@@ -87,11 +89,20 @@ def main():
     if not opts.base_dir:
         opts.base_dir = os.path.dirname(os.path.abspath(opts.config))
 
-    provider = Provider.new(opts.provider)
     with open(opts.config, 'rb') as f:
-        image_config = yaml.safe_load(f)
+        config = yaml.safe_load(f)
 
-    registry = provider.make_registry(image_config)
+    provider_config = config.pop('provider', {})
+    config_provider_name = provider_config.pop('name', None)
+    if config_provider_name and not opts.provider:
+        opts.provider = config_provider_name
+    elif not opts.provider:
+        print('Error: no provider specified, and not defined in config file',
+              file=sys.stderr)
+        return 1
+
+    provider = Provider.new(opts.provider, config=provider_config)
+    registry = provider.make_registry(config)
 
     ##
 
