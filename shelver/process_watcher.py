@@ -2,6 +2,7 @@ from __future__ import absolute_import, unicode_literals
 from future.utils import iteritems
 
 import os
+import signal
 from fcntl import F_GETFL, F_SETFL, fcntl
 from threading import Timer
 try:
@@ -26,7 +27,6 @@ class ProcessWatcher(object):
         self.timeout = timeout
 
         self.selector = DefaultSelector()
-        self.results = {}
         self.buffers = {}
 
         for name, proc in iteritems(procs):
@@ -47,13 +47,16 @@ class ProcessWatcher(object):
             self.selector = None
 
     def handle_line(self, name, line):
-        pass
+        raise NotImplementedError
+
+    def handle_finish(self, name, proc):
+        raise NotImplementedError
 
     def _reap_procs(self):
         for name, proc in list(self.procs.items()):
             ret = proc.poll()
             if ret is not None:
-                results[name] = ret
+                self.handle_finish(name, proc)
                 del self.procs[name]
 
         return bool(self.procs)
@@ -84,10 +87,10 @@ class ProcessWatcher(object):
             if proc.poll() is None:
                 proc.kill()
 
-    def terminate_all(self, kill_timeout=None):
+    def terminate_all(self, signal=signal.SIGTERM, kill_timeout=None):
         for proc in self.procs.values():
             if proc.poll() is None:
-                proc.terminate()
+                proc.send_signal(signal)
 
         if kill_timeout:
             timer = Timer(kill_timeout, self.kill_all)
