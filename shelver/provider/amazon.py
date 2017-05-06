@@ -1,8 +1,9 @@
-from __future__ import unicode_literals
+from __future__ import absolute_import, unicode_literals
 
 import os
 import tempfile
 import gzip
+import logging
 from collections import Mapping
 try:
     from functools import lru_cache
@@ -20,6 +21,8 @@ from shelver.util import wrap_as_coll, is_collection
 AMI_NAME_TAG = 'ImageName'
 AMI_VERSION_TAG = 'ImageVersion'
 AMI_ENVIRONMENT_TAG = 'ImageEnvironment'
+
+logger = logging.getLogger('shelver.provider.amazon')
 
 
 def _get_tag_by_key(tags, key):
@@ -71,6 +74,7 @@ class AmazonRegistry(Registry):
     def __init__(self, provider, data, ami_filters=None):
         super(AmazonRegistry, self).__init__(provider, data)
 
+        self.region = provider.region
         self.ami_filters = self.prepare_ami_filters(ami_filters)
 
     def _get_image_for_ami(self, ami):
@@ -80,17 +84,33 @@ class AmazonRegistry(Registry):
 
         return self.get_image(name_tag)
 
+    def _register_ami(self, ami, image=None):
+        if not image:
+            image = self._get_image_for_ami(ami)
+
+        artifact = AmazonArtifact(self.provider, ami, image=image)
+        if image:
+            self.register_image_artifact(image, artifact.version, artifact)
+        else:
+            self.register_artifact(artifact)
+
+    def load_artifact_by_id(self, id, region=None, image=None):
+        ec2 = self.provider.aws_res('ec2')
+
+        if region and region != self.provider.region:
+            logger.warn('Not loading AMI with ID %s, as it is not in region %s',
+                id, region)
+            return
+
+        ami = ec2.Image(id)
+        ami.load()
+        self._register_ami(ami, image)
+
     def load_existing_artifacts(self):
         ec2 = self.provider.aws_res('ec2')
 
         for ami in ec2.images.filter(Owners=['self'], Filters=self.ami_filters):
-            image = self._get_image_for_ami(ami)
-            artifact = AmazonArtifact(self.provider, ami, image=image)
-
-            if image:
-                self.register_image_artifact(image, artifact.version, artifact)
-            else:
-                self.register_artifact(artifact)
+            self._register_ami(ami)
 
 class AmazonBuilder(Builder):
     def __init__(self, *args, **kwargs):
@@ -195,9 +215,14 @@ class AmazonProvider(Provider):
     Builder = AmazonBuilder
     Artifact = AmazonArtifact
 
-    def __init__(self, config=None):
-        config = config or {}
+    def __init__(self, config):
+        region = config.pop('region', None)
+        if region:
+            config = config.copy()
+            config['region_name'] = region
+
         self._session = Session(**config)
+        self.region = self._session.region_name
 
         self.aws = lru_cache()(self._get_client)
         self.aws_res = lru_cache()(self._get_resource)
