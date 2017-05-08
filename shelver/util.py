@@ -6,6 +6,15 @@ from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
 from icicle import FrozenDict
 
 
+class AsyncBase():
+    def __init__(self, **kwargs):
+        self._loop = kwargs.pop('loop', asyncio.get_event_loop())
+        self._executor = kwargs.pop('executor', None)
+
+    def delay(self, fn, *args):
+        return self._loop.run_in_executor(self._executor, fn, *args)
+
+
 def is_collection(v):
     return isinstance(v, Iterable) and not isinstance(v, (bytes, str))
 
