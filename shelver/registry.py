@@ -1,24 +1,27 @@
+import asyncio
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, deque
 
 from distutils.version import LooseVersion
 from shelver.image import Image
-from shelver.util import freeze
+from shelver.util import AsyncBase, freeze
 from shelver.errors import (ConfigurationError, UnknownArtifactError,
                             UnknownImageError)
 
 
-class Registry(object, metaclass=ABCMeta):
+class Registry(AsyncBase, metaclass=ABCMeta):
     _GET_IMAGE_DEFAULT = object()
 
     version_key = LooseVersion
 
     @classmethod
-    def from_config(cls, provider, config):
+    def from_config(cls, provider, config, *args, **kwargs):
         images = Image.load_all(config)
-        return cls(provider, images)
+        return cls(provider, images, *args, **kwargs)
 
-    def __init__(self, provider, images):
+    def __init__(self, provider, images, **kwargs):
+        super().__init__(**kwargs)
+
         self.provider = provider
         self._images = freeze(images)
         self._image_set = frozenset(self._images.values())
@@ -82,14 +85,6 @@ class Registry(object, metaclass=ABCMeta):
     def get_artifact(self, name, default=None):
         return self._artifacts.get(name, default)
 
-    @abstractmethod
-    def load_artifact_by_id(self, id, region=None, image=None):
-        pass
-
-    @abstractmethod
-    def load_existing_artifacts(self, region=None):
-        return self
-
     def associate_artifact(self, artifact, image=None, version=None):
         if not image:
             image = artifact.image
@@ -113,6 +108,16 @@ class Registry(object, metaclass=ABCMeta):
 
         versions[version] = artifact
         return self
+
+    @abstractmethod
+    @asyncio.coroutine
+    def load_existing_artifacts(self, region=None):
+        pass
+
+    @abstractmethod
+    @asyncio.coroutine
+    def load_artifact_by_id(self, id, region=None, image=None):
+        pass
 
     def get_image_artifact(self, image, version=None,
                            default=_GET_IMAGE_DEFAULT):
