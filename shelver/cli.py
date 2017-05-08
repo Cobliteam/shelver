@@ -15,67 +15,66 @@ from shelver.errors import ShelverError
 logger = logging.getLogger('shelver.cli')
 
 
-def do_build(opts, provider, registry):
+def _filter_img(patterns, image):
+    return any(fnmatch(image.name, pat) for pat in patterns)
+
+def _build_done(image, fut):
+    try:
+        artifacts = fut.result()
+        for artifact in artifacts:
+            print('Built succeeded for image {}: {}'.format(
+                image.name, artifact))
+    except ShelverError as e:
+        print('Build failed for image {}: {}'.format(
+            image.name, e))
+    except Exception:
+        logger.exception('Build failed with unexpected exception')
+
+@asyncio.coroutine
+def do_build(opts, provider, config):
     if not opts.images:
         opts.images = ['*']
 
-    loop = asyncio.get_event_loop()
-    with provider.make_builder(registry,
-                               base_dir=opts.base_dir,
-                               tmp_dir=opts.tmp_dir,
-                               cache_dir=opts.cache_dir,
-                               keep_tmp=opts.keep_tmp,
-                               packer_cmd=opts.packer_cmd,
-                               loop=loop) as builder:
-        if not opts.images:
-            opts.images = ['*']
+    loop = provider._loop
+    registry = yield from provider.make_registry(config)
+    builder = yield from provider.make_builder(
+        registry,
+        base_dir=opts.base_dir,
+        tmp_dir=opts.tmp_dir,
+        cache_dir=opts.cache_dir,
+        keep_tmp=opts.keep_tmp,
+        packer_cmd=opts.packer_cmd,
+        loop=loop)
 
-        def filter_img(image):
-            return any(fnmatch(image.name, pat) for pat in opts.images)
-
-        def build_done(image, fut):
-            try:
-                artifacts = fut.result()
-                for artifact in artifacts:
-                    print('Built succeeded for image {}: {}'.format(
-                        image.name, artifact))
-            except ShelverError as e:
-                print('Build failed for image {}: {}'.format(
-                    image.name, e))
-            except Exception:
-                logger.exception('Build failed with unexpected exception')
-
+    try:
         coordinator = Coordinator(builder, max_builds=opts.max_builds,
                                   loop=loop)
         for name, image in registry.images.items():
-            if not filter_img(image):
+            if not _filter_img(opts.images, image):
+                continue
+
+            artifact = registry.get_image_artifact(image, default=None)
+            if artifact:
                 continue
 
             logger.info('Scheduling build for %s', name)
             build = coordinator.get_or_run_build(image)
-            build.add_done_callback(partial(build_done, image))
+            build.add_done_callback(partial(_build_done, image))
 
-        run_all = asyncio.ensure_future(coordinator.run_all())
-        try:
-            results = loop.run_until_complete(run_all)
-            failed = any(f.cancelled() or f.exception()
-                         for f in results.values())
-            return 1 if failed else 0
-        except KeyboardInterrupt:
-            print('Received interrupt, stopping tasks', file=sys.stderr)
-            run_all.cancel()
-            loop.run_forever()
-            run_all.exception()
-            return 1
-        except Exception:
-            logger.exception('Unexpected exception')
-            run_all.cancel()
-            loop.run_forever()
-            run_all.exception()
-            return 1
+        results = yield from coordinator.run_all()
+        for result in results:
+            if result.cancelled() or result.exception():
+                return 1
+
+        return 0
+    finally:
+        builder.close()
 
 
-def do_list(opts, provider, registry):
+@asyncio.coroutine
+def do_list(opts, provider, config):
+    registry = yield from provider.make_registry(config)
+
     images = sorted(registry.images.items())
     artifacts = set(registry.artifacts.values())
 
@@ -164,16 +163,33 @@ def main():
               file=sys.stderr)
         return 1
 
-    provider = Provider.new(opts.provider, config=provider_config)
-    registry = provider.make_registry(config)
-
     ##
 
+    loop = asyncio.get_event_loop()
+    provider = Provider.new(opts.provider, config=provider_config, loop=loop)
+
     if opts.command == 'list':
-        return do_list(opts, provider, registry)
+        run = do_list(opts, provider, config)
     elif opts.command == 'build':
-        return do_build(opts, provider, registry)
+        run = do_build(opts, provider, config)
     else:
         print("Error: invalid command '{}'".format(opts.command),
               file=sys.stderr)
+        return 1
+
+    run_fut = asyncio.ensure_future(run, loop=loop)
+    try:
+        status = loop.run_until_complete(run_fut)
+        return status
+    except KeyboardInterrupt:
+        print('Received interrupt, stopping tasks', file=sys.stderr)
+        run_fut.cancel()
+        loop.run_forever()
+        run_fut.exception()
+        return 1
+    except Exception:
+        logger.exception('Unexpected exception')
+        run_fut.cancel()
+        loop.run_forever()
+        run_fut.exception()
         return 1
