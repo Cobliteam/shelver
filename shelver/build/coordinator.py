@@ -2,27 +2,28 @@ import asyncio
 import logging
 
 from shelver.errors import ConfigurationError, PackerError, ShelverError
-
+from shelver.util import AsyncBase
 
 logger = logging.getLogger('shelver.build.coordinator')
 
 
-class Coordinator(object):
+class Coordinator(AsyncBase):
     def __init__(self, builder, *, msg_stream=None, max_builds=None,
-                 cancel_timeout=60, loop=None):
+                 cancel_timeout=60, **kwargs):
+        super().__init__(**kwargs)
+
         self.builder = builder
         self.registry = builder.registry
         self.cancel_timeout = cancel_timeout
         self.stopping = False
-        self._loop = loop or asyncio.get_event_loop()
         self._msg_stream = msg_stream
         self._build_counter = asyncio.BoundedSemaphore(
             max_builds or 999, loop=self._loop)
         self._builds = {}
 
     def _wait_builds(self, timeout=None):
-        return asyncio.wait_for(asyncio.gather(*self._builds.values()),
-                                timeout=timeout)
+        return asyncio.wait_for(
+            asyncio.gather(*self._builds.values()), timeout=timeout)
 
     @asyncio.coroutine
     def run_all(self):
@@ -118,7 +119,8 @@ class Coordinator(object):
             try:
                 id = result['id']
                 region = result.get('region')
-                artifact = self.registry.load_artifact_by_id(id, region=region)
+                artifact = yield from self.registry.load_artifact_by_id(
+                    id, region=region)
                 artifacts.append(artifact)
             except (KeyError, ValueError) as e:
                 logger.warn('Failed to register created artifact: %s',

@@ -16,14 +16,14 @@ from jinja2 import Template
 from icicle import FrozenDictEncoder
 
 from shelver.archive import Archive
-from shelver.util import deep_merge, is_collection
+from shelver.util import AsyncBase, deep_merge, is_collection
 from shelver.errors import ConfigurationError, ConcurrentBuildError
 from .watcher import Watcher
 
 logger = logging.getLogger('shelver.builder')
 
 
-class Builder(object):
+class Builder(AsyncBase):
     LOCAL_DIR_PREFIX = '.shelver'
 
     @classmethod
@@ -39,8 +39,9 @@ class Builder(object):
         return os.path.join(base_dir, cls.LOCAL_DIR_PREFIX, 'cache')
 
     def __init__(self, registry, base_dir, *, tmp_dir=None, cache_dir=None,
-                 log_dir=None, keep_tmp=True, packer_cmd='packer', loop=None,
-                 executor=None):
+                 log_dir=None, keep_tmp=True, packer_cmd='packer', **kwargs):
+
+        super().__init__(**kwargs)
 
         tmp_dir = tmp_dir or self.default_tmp_dir(base_dir)
         cache_dir = cache_dir or self.default_cache_dir(base_dir)
@@ -57,14 +58,9 @@ class Builder(object):
         self.keep_tmp = bool(keep_tmp)
         self.packer_cmd = packer_cmd
 
-        self._loop = loop or asyncio.get_event_loop()
-        self._executor = executor
         self._build_tmp_dir = None
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def close(self):
         if self._build_tmp_dir and not self.keep_tmp:
             try:
                 logger.info('Cleaning up temporary build dir %s',
@@ -73,12 +69,6 @@ class Builder(object):
             except Exception:
                 pass
         self._build_tmp_dir = None
-
-        return False
-
-    def _delay(self, *args, **kwargs):
-        return self._loop.run_in_executor(
-            self._executor, *args, **kwargs)
 
     @staticmethod
     def _create_tmp_dir(base):
@@ -94,7 +84,7 @@ class Builder(object):
         if self._build_tmp_dir:
             return self._build_tmp_dir
 
-        self._build_tmp_dir = yield from self._delay(
+        self._build_tmp_dir = yield from self.delay(
             self._create_tmp_dir, self.tmp_dir)
         return self._build_tmp_dir
 
@@ -172,7 +162,7 @@ class Builder(object):
     def write_template(self, data):
         tmp = yield from self.get_build_tmp_dir()
 
-        fd, path = yield from self._delay(
+        fd, path = yield from self.delay(
             partial(tempfile.mkstemp, suffix='.json', dir=tmp))
         f = yield from aiofiles.open(fd, 'w', encoding='utf-8',
                                      loop=self._loop, executor=self._executor)
@@ -208,7 +198,7 @@ class Builder(object):
     @asyncio.coroutine
     def _open_log_file(self, name, version):
         if not os.path.isdir(self.log_dir):
-            yield from self._delay(os.makedirs, self.log_dir)
+            yield from self.delay(os.makedirs, self.log_dir)
 
         fname = '{}_{}.log'.format(name, version)
         path = os.path.join(self.log_dir, fname)
@@ -223,7 +213,7 @@ class Builder(object):
             yield from self.build_archive(image.archive)
         context = \
             yield from self.get_template_context(
-                image, version, archive, base_artifact)
+                image, version, archive, base_artifact=base_artifact)
         packer_data = \
             yield from self.load_template(image.template_path, context)
         packer_data = \
