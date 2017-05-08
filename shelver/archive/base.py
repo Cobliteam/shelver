@@ -1,9 +1,13 @@
 import os
 import shutil
 import asyncio
+import logging
 from abc import ABCMeta, abstractmethod
 
 from shelver.errors import ConfigurationError
+from ._flock import FileLock
+
+logger = logging.getLogger('shelver.archive.base')
 
 
 class Archive(metaclass=ABCMeta):
@@ -54,18 +58,39 @@ class Archive(metaclass=ABCMeta):
 
     @asyncio.coroutine
     def get_or_build(self):
-        if not self._path:
-            basename = yield from self.basename()
-            cached = os.path.join(self.cache_dir, basename)
-            if not os.path.isfile(cached):
-                tmp_archive = yield from self.build()
-                mv = self._loop.run_in_executor(self._executor, shutil.move,
-                                                tmp_archive, cached)
-                yield from mv
+        if self._path:
+            return self._path
 
-            self._path = cached
+        basename = yield from self.basename()
+        path = os.path.join(self.cache_dir, basename)
 
-        return self._path
+        try:
+            # Try to create the file if it does not exist, then lock it while
+            # the builder is running to avoid simulatenous builds. Then finally
+            # swap the tmp file with the final one.
+            with open(path, 'x') as f:
+                lock = FileLock(f, loop=self._loop, executor=self._executor)
+                yield from lock.acquire()
+                try:
+                    tmp_archive = yield from self.build()
+                    mv = self._loop.run_in_executor(
+                        self._executor, shutil.move, tmp_archive, path)
+                    yield from mv
+                finally:
+                    lock.release()
+        except FileExistsError:
+            with open(path, 'rb') as f:
+                # Acquire the read lock and release it immediately, just to wait
+                # until a running build finishes
+                lock = FileLock(f, loop=self._loop, executor=self._executor)
+                yield from lock.acquire(exclusive=False)
+                lock.release()
+        except Exception:
+            logger.exception('Failed to build archive')
+            os.unlink(path)
+
+        self._path = path
+        return path
 
     def to_dict(self):
         return {

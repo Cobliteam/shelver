@@ -17,18 +17,23 @@ class GitArchive(Archive):
 
         self.git_cmd = git_cmd
         self.revision = revision or 'HEAD'
+        self._git_lock = asyncio.Lock()
         self._basename = None
         self._revision_hash = None
 
     @asyncio.coroutine
     def _run_git(self, *args, capture=False, **kwargs):
         stdout = subprocess.PIPE if capture else None
-        out, err = yield from async_subprocess_run(
-            self.git_cmd, *args, stdout=stdout, loop=self._loop, **kwargs)
-        if not capture:
-            return None, None
+        yield from self._git_lock.acquire()
+        try:
+            out, err = yield from async_subprocess_run(
+                self.git_cmd, *args, stdout=stdout, loop=self._loop, **kwargs)
+            if not capture:
+                return None, None
 
-        return out, err
+            return out, err
+        finally:
+            self._git_lock.release()
 
     @asyncio.coroutine
     def revision_hash(self):
