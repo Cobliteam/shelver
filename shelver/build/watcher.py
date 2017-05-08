@@ -85,6 +85,8 @@ class Watcher(object):
                 self.errors.append(data)
             elif type_ == b'artifact':
                 i, data_key, *data_val = data.split(',')
+                i = int(i)
+
                 while i >= len(self.artifacts):
                     self.artifacts.append({})
                 artifact = self.artifacts[i]
