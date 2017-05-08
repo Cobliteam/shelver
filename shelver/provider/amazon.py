@@ -1,11 +1,13 @@
 import os
+import logging
+import json
 import tempfile
 import gzip
-import logging
 from collections import Mapping
 from functools import lru_cache
 
 from boto3.session import Session
+from botocore.client import ClientError
 from shelver.registry import Registry
 from shelver.artifact import Artifact
 from shelver.build import Builder
@@ -89,8 +91,9 @@ class AmazonRegistry(Registry):
         ec2 = self.provider.aws_res('ec2')
 
         if region and region != self.provider.region:
-            logger.warn('Not loading AMI with ID %s, as it is not in region %s',
-                        id, region)
+            logger.warn(
+                'Not loading AMI with ID %s, as it is not in region %s',
+                id, region)
             return
 
         ami = ec2.Image(id)
@@ -100,7 +103,8 @@ class AmazonRegistry(Registry):
     def load_existing_artifacts(self, region=None):
         ec2 = self.provider.aws_res('ec2')
 
-        for ami in ec2.images.filter(Owners=['self'], Filters=self.ami_filters):
+        for ami in ec2.images.filter(Owners=['self'],
+                                     Filters=self.ami_filters):
             image = self._get_image_for_ami(ami)
             self._register_ami(ami, image)
 
@@ -142,8 +146,10 @@ class AmazonBuilder(Builder):
                 raise
 
         if not profile:
-            profile = iam.create_instance_profile(InstanceProfileName=prof_name)
-            role = iam.create_role(
+            profile = iam.create_instance_profile(
+                InstanceProfileName=prof_name)
+
+            iam.create_role(
                 RoleName=role_name,
                 AssumeRolePolicyDocument=json.dumps({
                   "Version": "2012-10-17",
@@ -201,6 +207,7 @@ class AmazonBuilder(Builder):
         })
         return context
 
+
 class AmazonProvider(Provider):
     NAMES = ('amazon', 'aws')
 
@@ -209,6 +216,8 @@ class AmazonProvider(Provider):
     Artifact = AmazonArtifact
 
     def __init__(self, config):
+        super().__init__(config)
+
         region = config.pop('region', None)
         if region:
             config = config.copy()
@@ -229,5 +238,3 @@ class AmazonProvider(Provider):
 
     def _get_resource(self, *args, **kwargs):
         return self.session.resource(*args, **kwargs)
-
-

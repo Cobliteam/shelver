@@ -1,10 +1,10 @@
 import logging
 import asyncio
 
-from shelver.provider import Provider
 from shelver.artifact import Artifact
 from shelver.registry import Registry
 from shelver.build import Builder
+from .base import Provider
 
 
 logger = logging.getLogger('shelver.provider.test')

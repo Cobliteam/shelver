@@ -4,7 +4,8 @@ from collections import defaultdict, deque
 from distutils.version import LooseVersion
 from shelver.image import Image
 from shelver.util import freeze
-from shelver.errors import *
+from shelver.errors import (ConfigurationError, UnknownArtifactError,
+                            UnknownImageError)
 
 
 class Registry(object, metaclass=ABCMeta):

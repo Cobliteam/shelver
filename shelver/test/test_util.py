@@ -2,7 +2,8 @@ import pytest
 from collections import OrderedDict, Mapping
 
 from icicle import FrozenDict
-from shelver.util import *
+from shelver.util import (is_collection, wrap_as_coll, deep_merge, freeze,
+                          topological_sort)
 
 
 class ListMapping(Mapping):
@@ -123,7 +124,7 @@ def test_freeze(obj, frozen):
      {'c': ['a', 'b']},
      [{'a', 'b'}, {'c'}]),
     # cycle
-    (['a', 'b','c'],
+    (['a', 'b', 'c'],
      {'a': 'b', 'b': 'c', 'c': 'a'},
      None),
 

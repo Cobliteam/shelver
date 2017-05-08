@@ -9,7 +9,6 @@ import asyncio
 from functools import partial
 from collections import Mapping
 from ast import literal_eval
-from signal import SIGINT
 
 import yaml
 import aiofiles
@@ -17,7 +16,7 @@ from jinja2 import Template
 from icicle import FrozenDictEncoder
 
 from shelver.archive import Archive
-from shelver.util import deep_merge, is_collection, async_open
+from shelver.util import deep_merge, is_collection
 from shelver.errors import ConfigurationError, ConcurrentBuildError
 from .watcher import Watcher
 

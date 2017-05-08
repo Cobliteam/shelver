@@ -1,13 +1,8 @@
-import os
-import sys
 import subprocess
 import asyncio
-from functools import partial
 from itertools import chain
 from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
-from asyncio.streams import FlowControlMixin
 
-import aiofiles.threadpool
 from icicle import FrozenDict
 
 
@@ -119,28 +114,6 @@ def topological_sort(nodes, edges):
 
 
 @asyncio.coroutine
-def async_open(f, *args, loop=None, executor=None, **kwargs):
-    loop = loop or asyncio.get_event_loop()
-    f = yield from loop.run_in_executor(executor, partial(f, *args, **kwargs))
-    return aiofiles.threadpool.wrap(f, loop=loop)
-
-
-@asyncio.coroutine
-def async_stdio(loop=None):
-    loop = loop or asyncio.get_event_loop()
-    reader = asyncio.StreamReader()
-    reader_protocol = asyncio.StreamReaderProtocol(reader)
-
-    transport, protocol = \
-        yield from loop.connect_write_pipe(FlowControlMixin, os.fdopen(1, 'wb'))
-    writer = asyncio.StreamWriter(transport, protocol, None, loop)
-
-    yield from loop.connect_read_pipe(lambda: reader_protocol, sys.stdin)
-
-    return reader, writer
-
-
-@asyncio.coroutine
 def async_subprocess_run(program, *args, input=None, stdout=subprocess.PIPE,
                          stderr=None, loop=None, **kwargs):
     loop = loop or asyncio.get_event_loop()
@@ -161,4 +134,3 @@ def async_subprocess_run(program, *args, input=None, stdout=subprocess.PIPE,
         raise exc
 
     return out, err
-

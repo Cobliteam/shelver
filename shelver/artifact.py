@@ -12,7 +12,8 @@ class Artifact(metaclass=ABCMeta):
             if not name:
                 name = image.name
         elif not name:
-            raise ValueError('At least one of name and image must be specified')
+            raise ValueError(
+                'At least one of name and image must be specified')
 
         self._provider = provider
         self._name = name
