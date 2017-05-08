@@ -14,15 +14,11 @@ setup(
     author_email='daniel@cobli.co',
     license='MPL2',
     install_requires=[
-      'pyyaml',
-      'future',
-      'Jinja2',
-      'boto3',
-      'sortedcontainers',
-      'icicle',
-      'subprocess32; python_version < "3"',
-      'selectors2; python_version < "3"',
-      'backports.functools_lru_cache; python_version < "3"'
+        'pyyaml',
+        'Jinja2',
+        'boto3',
+        'icicle',
+        'aiofiles'
     ],
     scripts=['bin/shelver'],
     keywords='packer aws ami cloud cd continuous-deployment')

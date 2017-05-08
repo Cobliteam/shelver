@@ -1,11 +1,8 @@
-from __future__ import unicode_literals
-from future.utils import with_metaclass
-
-from abc import ABCMeta, abstractproperty
+from abc import ABCMeta, abstractmethod
 
 
-class Artifact(with_metaclass(ABCMeta, object)):
-    def __init__(self, provider,  name=None, image=None, version=None,
+class Artifact(metaclass=ABCMeta):
+    def __init__(self, provider, name=None, image=None, version=None,
                  environment=None):
         if image:
             if not version:
@@ -43,13 +40,13 @@ class Artifact(with_metaclass(ABCMeta, object)):
     def environment(self):
         return self._environment
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def id(self):
         pass
 
     def __str__(self):
-        return '{}(id={}, name={}, image={}, version={}, environment={})'.format(
-            type(self).__name__, self.id, self.name, self.image, self.version,
-            self.environment)
-
-
+        return \
+            '{}(id={}, name={}, image={}, version={}, environment={})'.format(
+                type(self).__name__, self.id, self.name, self.image,
+                self.version, self.environment)

@@ -99,6 +99,7 @@ ENV/
 
 # shelver
 .shelver
+!shelver/build
 
 # IntelliJ
 *.iml

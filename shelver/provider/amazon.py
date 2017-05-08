@@ -1,21 +1,16 @@
-from __future__ import absolute_import, unicode_literals
-
 import os
 import tempfile
 import gzip
 import logging
 from collections import Mapping
-try:
-    from functools import lru_cache
-except ImportError:
-    from backports.functools_lru_cache import lru_cache
+from functools import lru_cache
 
 from boto3.session import Session
-from shelver.provider import Provider
 from shelver.registry import Registry
 from shelver.artifact import Artifact
-from shelver.builder import Builder
+from shelver.build import Builder
 from shelver.util import wrap_as_coll, is_collection
+from .base import Provider
 
 
 AMI_NAME_TAG = 'ImageName'
@@ -85,32 +80,30 @@ class AmazonRegistry(Registry):
         return self.get_image(name_tag)
 
     def _register_ami(self, ami, image=None):
-        if not image:
-            image = self._get_image_for_ami(ami)
-
         artifact = AmazonArtifact(self.provider, ami, image=image)
+        self.register_artifact(artifact)
         if image:
-            self.register_image_artifact(image, artifact.version, artifact)
-        else:
-            self.register_artifact(artifact)
+            self.associate_artifact(artifact, image=image)
 
     def load_artifact_by_id(self, id, region=None, image=None):
         ec2 = self.provider.aws_res('ec2')
 
         if region and region != self.provider.region:
             logger.warn('Not loading AMI with ID %s, as it is not in region %s',
-                id, region)
+                        id, region)
             return
 
         ami = ec2.Image(id)
         ami.load()
         self._register_ami(ami, image)
 
-    def load_existing_artifacts(self):
+    def load_existing_artifacts(self, region=None):
         ec2 = self.provider.aws_res('ec2')
 
         for ami in ec2.images.filter(Owners=['self'], Filters=self.ami_filters):
-            self._register_ami(ami)
+            image = self._get_image_for_ami(ami)
+            self._register_ami(ami, image)
+
 
 class AmazonBuilder(Builder):
     def __init__(self, *args, **kwargs):
@@ -201,7 +194,7 @@ class AmazonBuilder(Builder):
         return user_data_file
 
     def template_context(self, image, version):
-        context = super(AmazonBuilder, self).template_context(image, version)
+        context = super(AmazonBuilder, self).to_dict(image, version)
         context.update({
             'user_data_file': self.get_user_data_file(image),
             'instance_profile': self.get_instance_profile()

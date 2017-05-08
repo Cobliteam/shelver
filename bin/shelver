@@ -1,6 +1,5 @@
 #!/bin/env python
 
-from __future__ import absolute_import, unicode_literals
-
+import sys
 from shelver.cli import main
-main()
+sys.exit(main())
