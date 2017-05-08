@@ -21,6 +21,7 @@ class TestArtifact(Artifact):
 
 
 class TestRegistry(Registry):
+    @asyncio.coroutine
     def load_artifact_by_id(self, id, region=None):
         name, version = id.split(':')
         image = self.get_image(name)
@@ -30,8 +31,9 @@ class TestRegistry(Registry):
         self.associate_artifact(artifact, image, version)
         return artifact
 
+    @asyncio.coroutine
     def load_existing_artifacts(self, region=None):
-        return self
+        pass
 
 
 class TestBuilder(Builder):

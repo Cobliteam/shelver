@@ -3,8 +3,9 @@ import logging
 import json
 import tempfile
 import gzip
+import asyncio
 from collections import Mapping
-from functools import lru_cache
+from functools import partial, lru_cache
 
 from boto3.session import Session
 from botocore.client import ClientError
@@ -40,9 +41,8 @@ class AmazonArtifact(Artifact):
             version = None
             environment = None
 
-        super(AmazonArtifact, self).__init__(
-            provider, name=name, image=image, version=version,
-            environment=environment)
+        super().__init__(provider, name=name, image=image, version=version,
+                         environment=environment)
 
         self._ami = ami
 
@@ -68,8 +68,8 @@ class AmazonRegistry(Registry):
         else:
             raise ValueError('AMI filters must be a list or dict')
 
-    def __init__(self, provider, data, ami_filters=None):
-        super(AmazonRegistry, self).__init__(provider, data)
+    def __init__(self, provider, data, ami_filters=None, **kwargs):
+        super().__init__(provider, data, **kwargs)
 
         self.region = provider.region
         self.ami_filters = self.prepare_ami_filters(ami_filters)
@@ -87,6 +87,7 @@ class AmazonRegistry(Registry):
         if image:
             self.associate_artifact(artifact, image=image)
 
+    @asyncio.coroutine
     def load_artifact_by_id(self, id, region=None, image=None):
         ec2 = self.provider.aws_res('ec2')
 
@@ -96,22 +97,31 @@ class AmazonRegistry(Registry):
                 id, region)
             return
 
-        ami = ec2.Image(id)
-        ami.load()
+        def load():
+            ami = ec2.Image(id)
+            ami.load()
+            return ami
+
+        ami = yield from self.delay(ami.load)
         self._register_ami(ami, image)
 
+    @asyncio.coroutine
     def load_existing_artifacts(self, region=None):
         ec2 = self.provider.aws_res('ec2')
 
-        for ami in ec2.images.filter(Owners=['self'],
-                                     Filters=self.ami_filters):
+        def load():
+            images = ec2.images.filter(Owners=['self'], Filters=self.ami_filters)
+            return list(images)
+
+        images = yield from self.delay(load)
+        for ami in images:
             image = self._get_image_for_ami(ami)
             self._register_ami(ami, image)
 
 
 class AmazonBuilder(Builder):
     def __init__(self, *args, **kwargs):
-        super(AmazonBuilder, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._instance_profile = None
 
@@ -181,29 +191,41 @@ class AmazonBuilder(Builder):
 
         return profile['InstanceProfile']['InstanceProfileName']
 
+    @asyncio.coroutine
     def get_instance_profile(self):
         if not self._instance_profile:
-            self._instance_profile = self._create_instance_profile()
+            prof = yield from self.delay(self._create_instance_profile)
+            self._instance_profile = prof
 
         return self._instance_profile
 
+    @asyncio.coroutine
     def get_user_data_file(self, image):
         if not image.metadata:
             return ''
 
-        fd, user_data_file = tempfile.mkstemp(
-            suffix='.gz', dir=self.get_build_tmp_dir())
+        tmp = yield from self.get_build_tmp_dir()
+        fd, path = yield from self.delay(
+            partial(tempfile.mkstemp, suffix='.gz', dir=tmp))
+
+        data = '\n'.join(image.metadata).encode('utf-8')
         with os.fdopen(fd, 'wb') as f:
             with gzip.GzipFile(fileobj=f, mode='wb') as gzf:
-                gzf.write('\n'.join(image.metadata))
+                yield from self.delay(gzf.write, data)
 
-        return user_data_file
+        return path
 
-    def template_context(self, image, version):
-        context = super(AmazonBuilder, self).to_dict(image, version)
+    @asyncio.coroutine
+    def get_template_context(self, image, version, archive, **kwargs):
+        context = yield from super().get_template_context(
+            image, version, archive, **kwargs)
+
+        data_file = yield from self.get_user_data_file(image)
+        prof = yield from self.get_instance_profile()
+
         context.update({
-            'user_data_file': self.get_user_data_file(image),
-            'instance_profile': self.get_instance_profile()
+            'aws_user_data_file': data_file,
+            'aws_instance_profile': prof
         })
         return context
 
@@ -215,8 +237,8 @@ class AmazonProvider(Provider):
     Builder = AmazonBuilder
     Artifact = AmazonArtifact
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
 
         region = config.pop('region', None)
         if region:
