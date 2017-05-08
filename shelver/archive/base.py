@@ -5,12 +5,13 @@ import logging
 from abc import ABCMeta, abstractmethod
 
 from shelver.errors import ConfigurationError
+from shelver.util import AsyncBase
 from ._flock import FileLock
 
 logger = logging.getLogger('shelver.archive.base')
 
 
-class Archive(metaclass=ABCMeta):
+class Archive(AsyncBase, metaclass=ABCMeta):
     _types = {}
 
     @classmethod
@@ -34,13 +35,12 @@ class Archive(metaclass=ABCMeta):
         return archive_cls(source_dir=source_dir,
                            **archive_opts)
 
-    def __init__(self, source_dir, tmp_dir, cache_dir, *, loop=None,
-                 executor=None):
+    def __init__(self, source_dir, tmp_dir, cache_dir, **kwargs):
+        super().__init__(**kwargs)
+
         self.source_dir = source_dir
         self.tmp_dir = tmp_dir
         self.cache_dir = cache_dir
-        self._loop = loop or asyncio.get_event_loop()
-        self._executor = executor
         self._path = None
 
         if not os.path.isdir(self.cache_dir):
