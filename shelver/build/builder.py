@@ -17,6 +17,7 @@ from jinja2 import Template
 from shelver.archive import Archive
 from shelver.util import AsyncBase, deep_merge, is_collection
 from shelver.errors import ConfigurationError, ConcurrentBuildError
+from .coordinator import Coordinator
 from .watcher import Watcher
 
 logger = logging.getLogger('shelver.builder')
@@ -58,6 +59,11 @@ class Builder(AsyncBase):
         self.packer_cmd = packer_cmd
 
         self._build_tmp_dir = None
+
+    def make_coordinator(self, **kwargs):
+        kwargs.setdefault('loop', self._loop)
+        kwargs.setdefault('executor', self._executor)
+        return Coordinator(self, **kwargs)
 
     def close(self):
         if self._build_tmp_dir and not self.keep_tmp:
