@@ -12,6 +12,7 @@ from botocore.client import ClientError
 from shelver.registry import Registry
 from shelver.artifact import Artifact
 from shelver.build import Builder
+from shelver.errors import ConfigurationError
 from shelver.util import wrap_as_coll, is_collection
 from .base import Provider
 
@@ -66,7 +67,7 @@ class AmazonRegistry(Registry):
         elif is_collection(filters):
             return filters
         else:
-            raise ValueError('AMI filters must be a list or dict')
+            raise ConfigurationError('AMI filters must be a list or dict')
 
     def __init__(self, provider, data, ami_filters=None, **kwargs):
         super().__init__(provider, data, **kwargs)
@@ -87,6 +88,8 @@ class AmazonRegistry(Registry):
         if image:
             self.associate_artifact(artifact, image=image)
 
+        return artifact
+
     @asyncio.coroutine
     def load_artifact_by_id(self, id, region=None, image=None):
         ec2 = self.provider.aws_res('ec2')
@@ -97,26 +100,25 @@ class AmazonRegistry(Registry):
                 id, region)
             return
 
-        def load():
-            ami = ec2.Image(id)
-            ami.load()
-            return ami
-
-        ami = yield from self.delay(ami.load)
-        self._register_ami(ami, image)
+        ami = ec2.Image(id)
+        yield from self.delay(ami.load)
+        return self._register_ami(ami, image)
 
     @asyncio.coroutine
     def load_existing_artifacts(self, region=None):
         ec2 = self.provider.aws_res('ec2')
 
-        def load():
-            images = ec2.images.filter(Owners=['self'], Filters=self.ami_filters)
+        def load_images():
+            images = ec2.images.filter(Owners=['self'],
+                                       Filters=self.ami_filters)
             return list(images)
 
-        images = yield from self.delay(load)
+        images = yield from self.delay(load_images)
         for ami in images:
             image = self._get_image_for_ami(ami)
             self._register_ami(ami, image)
+
+        return self
 
 
 class AmazonBuilder(Builder):
