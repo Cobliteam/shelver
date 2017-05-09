@@ -82,8 +82,14 @@ class Registry(AsyncBase, metaclass=ABCMeta):
 
         return self
 
-    def get_artifact(self, name, default=None):
-        return self._artifacts.get(name, default)
+    def get_artifact(self, name, default=_GET_IMAGE_DEFAULT):
+        try:
+            return self._artifacts[name]
+        except KeyError:
+            if default is self._GET_IMAGE_DEFAULT:
+                raise UnknownArtifactError(name)
+
+            return default
 
     def associate_artifact(self, artifact, image=None, version=None):
         if not image:
