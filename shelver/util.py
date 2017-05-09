@@ -94,34 +94,6 @@ def freeze(obj):
         raise ValueError('Cannot freeze object of type {}'.format(type(obj)))
 
 
-def topological_sort(nodes, edges):
-    result = []
-    edges = {dest: set(sources) for (dest, sources) in edges.items()}
-    leaves = deque(filter(lambda n: n not in edges, nodes))
-
-    while leaves:
-        result.append(set())
-        while leaves:
-            leaf = leaves.popleft()
-            result[-1].add(leaf)
-
-            for dest, sources in edges.items():
-                try:
-                    sources.remove(leaf)
-                except ValueError:
-                    pass
-
-        for dest in list(edges):
-            if not edges[dest]:
-                del edges[dest]
-                leaves.append(dest)
-
-    if edges:
-        return None, edges
-
-    return result, None
-
-
 @asyncio.coroutine
 def async_subprocess_run(program, *args, input=None, stdout=subprocess.PIPE,
                          stderr=None, loop=None, **kwargs):

@@ -175,26 +175,6 @@ class Builder(AsyncBase):
         finally:
             yield from f.close()
 
-    def _build_graph(self, filter_by=None):
-        def filter_unbuilt(self, image):
-            if filter_by and not filter_by(image):
-                return False
-
-            current_artifact = self.registry.get_image_artifact(image)
-            if current_artifact:
-                logger.info(
-                    'found existing artifact - {}:{} = {}'.format(
-                        image.name, image.current_version, current_artifact.id))
-                return True
-
-            if self.find_running_build(image, image.current_version):
-                raise ConcurrentBuildError(
-                    'Build already running for image {}'.format(image.name))
-
-            return True
-
-        return self.registry.build_order(filter_by=filter_unbuilt)
-
     @asyncio.coroutine
     def _open_log_file(self, name, version):
         if not os.path.isdir(self.log_dir):

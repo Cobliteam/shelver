@@ -1,6 +1,6 @@
 import asyncio
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict, deque
+from collections import defaultdict
 
 from distutils.version import LooseVersion
 from shelver.image import Image
@@ -152,35 +152,3 @@ class Registry(AsyncBase, metaclass=ABCMeta):
             base_artifact = self.get_artifact(image.base)
 
         return base_artifact
-
-    def _build_graph(self, filter_by=None):
-        images = set()
-        to_visit = deque(filter(filter_by, self._image_set))
-        edges = {}
-
-        while to_visit:
-            image = to_visit.popleft()
-            if image in images:
-                continue
-
-            images.add(image)
-            base_image = image.base and self.get_image(image.base)
-            if not base_image:
-                continue
-
-            edges[image] = [base_image]
-            to_visit.append(base_image)
-
-        return images, edges
-
-    def build_order(self, filter_by=None):
-        levels, unsatisfied_edges = self._build_order(filter_by)
-        if unsatisfied_edges:
-            cycles = ', '.join(
-                '{} <- {}'.format(dest, tuple(sources))
-                for dest, sources in unsatisfied_edges.items())
-
-            raise ConfigurationError(
-                'Unsatisfied dependencies or cycles found: {}'.format(cycles))
-
-        return levels
