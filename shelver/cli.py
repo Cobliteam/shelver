@@ -18,6 +18,7 @@ logger = logging.getLogger('shelver.cli')
 def _filter_img(patterns, image):
     return any(fnmatch(image.name, pat) for pat in patterns)
 
+
 def _build_done(image, fut):
     try:
         artifacts = fut.result()
@@ -30,25 +31,25 @@ def _build_done(image, fut):
     except Exception:
         logger.exception('Build failed with unexpected exception')
 
+
 @asyncio.coroutine
 def do_build(opts, provider, config):
     if not opts.images:
         opts.images = ['*']
 
     loop = provider._loop
-    registry = yield from provider.make_registry(config)
+    registry = provider.make_registry(config)
+    yield from registry.load_existing_artifacts()
     builder = yield from provider.make_builder(
         registry,
         base_dir=opts.base_dir,
         tmp_dir=opts.tmp_dir,
         cache_dir=opts.cache_dir,
         keep_tmp=opts.keep_tmp,
-        packer_cmd=opts.packer_cmd,
-        loop=loop)
+        packer_cmd=opts.packer_cmd)
 
     try:
-        coordinator = Coordinator(builder, max_builds=opts.max_builds,
-                                  loop=loop)
+        coordinator = builder.make_coordinator(max_builds=opts.max_builds)
         for name, image in registry.images.items():
             if not _filter_img(opts.images, image):
                 continue
@@ -73,7 +74,8 @@ def do_build(opts, provider, config):
 
 @asyncio.coroutine
 def do_list(opts, provider, config):
-    registry = yield from provider.make_registry(config)
+    registry = provider.make_registry(config)
+    yield from registry.load_existing_artifacts()
 
     images = sorted(registry.images.items())
     artifacts = set(registry.artifacts.values())
@@ -156,10 +158,10 @@ def main():
 
     provider_config = config.pop('provider', {})
     config_provider_name = provider_config.pop('name', None)
-    if config_provider_name and not opts.provider:
-        opts.provider = config_provider_name
-    elif not opts.provider:
-        print('Error: no provider specified, and not defined in config file',
+
+    opts.provider = opts.provider or config_provider_name
+    if not opts.provider:
+        print('Error: no provider specified in command line or config file',
               file=sys.stderr)
         return 1
 
