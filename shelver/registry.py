@@ -50,7 +50,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         try:
             return self[image]
         except KeyError:
-            if default is not self._GET_IMAGE_DEFAULT:
+            if default is self._GET_IMAGE_DEFAULT:
                 raise
 
             return default
