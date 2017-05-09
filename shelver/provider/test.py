@@ -11,8 +11,8 @@ logger = logging.getLogger('shelver.provider.test')
 
 
 class TestArtifact(Artifact):
-    def __init__(self, provider, id, **kwargs):
-        super().__init__(provider, **kwargs)
+    def __init__(self, id, **kwargs):
+        super().__init__(**kwargs)
         self._id = id
 
     @property

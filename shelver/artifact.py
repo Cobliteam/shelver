@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 
 
 class Artifact(metaclass=ABCMeta):
-    def __init__(self, provider, name=None, image=None, version=None,
+    def __init__(self, *, provider, name=None, image=None, version=None,
                  environment=None):
         if image:
             if not version:
