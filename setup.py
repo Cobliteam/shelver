@@ -17,7 +17,6 @@ setup(
         'pyyaml',
         'Jinja2',
         'boto3',
-        'icicle',
         'aiofiles'
     ],
     scripts=['bin/shelver'],

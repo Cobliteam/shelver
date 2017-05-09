@@ -2,8 +2,37 @@ import subprocess
 import asyncio
 from itertools import chain
 from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
+from types import MappingProxyType
 
-from icicle import FrozenDict
+
+class FrozenDict(Mapping):  # pragma: nocover
+    def __init__(self, *args, **kwargs):
+        self._data = dict(*args, **kwargs)
+        self._hash = None
+
+    def __getitem__(self, key):
+        return self._data[key]
+
+    def __len__(self):
+        return len(self._data)
+
+    def __iter__(self):
+        return iter(self._data)
+
+    def __hash__(self):
+        if not self._hash:
+            self._hash = hash(frozenset(self._data.items()))
+
+        return self._hash
+
+    def __repr__(self):
+        return '{}({})'.format(type(self), repr(self._data))
+
+    def __eq__(self, other):
+        if isinstance(other, type(self)):
+            return self._data == other._data
+        elif isinstance(other, Mapping):
+            return self._data == other
 
 
 class AsyncBase():

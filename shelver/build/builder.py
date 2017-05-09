@@ -13,7 +13,6 @@ from ast import literal_eval
 import yaml
 import aiofiles
 from jinja2 import Template
-from icicle import FrozenDictEncoder
 
 from shelver.archive import Archive
 from shelver.util import AsyncBase, deep_merge, is_collection
@@ -167,7 +166,7 @@ class Builder(AsyncBase):
         f = yield from aiofiles.open(fd, 'w', encoding='utf-8',
                                      loop=self._loop, executor=self._executor)
         try:
-            content = json.dumps(data, indent=2, cls=FrozenDictEncoder)
+            content = json.dumps(data, indent=2)
             logger.debug('Generated packer template: \n%s', content)
 
             yield from f.write(content)

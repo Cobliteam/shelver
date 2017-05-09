@@ -1,9 +1,8 @@
 import pytest
 from collections import OrderedDict, Mapping
 
-from icicle import FrozenDict
-from shelver.util import (is_collection, wrap_as_coll, deep_merge, freeze,
-                          topological_sort)
+from shelver.util import (FrozenDict, is_collection, wrap_as_coll, deep_merge,\
+                          freeze)
 
 
 class ListMapping(Mapping):
@@ -100,9 +99,9 @@ def test_deep_merge(left, right, merged):
     ([], ()),
     (set(), frozenset()),
     (bytearray(), bytes()),
-    ({'a': 1}, FrozenDict(a=1)),
-    ({'a': []}, FrozenDict(a=())),
-
+    ({'a': 1}, FrozenDict({'a': 1})),
+    ({'a': []}, FrozenDict({'a': ()}))
 ])
 def test_freeze(obj, frozen):
     res = freeze(obj)
+    assert res == frozen and type(res) == type(frozen)
