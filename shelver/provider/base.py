@@ -51,3 +51,6 @@ class Provider(AsyncBase, metaclass=ABCMeta):
         kwargs.setdefault('loop', self._loop)
         kwargs.setdefault('executor', self._executor)
         return self.Builder(*args, **kwargs)
+
+    def make_artifact(self, **kwargs):
+        return self.Artifact(provider=self, **kwargs)
