@@ -22,9 +22,11 @@ class TestArtifact(Artifact):
 
 class TestRegistry(Registry):
     @asyncio.coroutine
-    def load_artifact_by_id(self, id, region=None):
+    def load_artifact_by_id(self, id, region=None, image=None):
         name, version = id.split(':')
-        image = self.get_image(name)
+        if not image:
+            image = self.get_image(name)
+
         artifact = TestArtifact(self.provider, id, image=image,
                                 version=version, environment='test')
         self.register_artifact(artifact)
@@ -45,10 +47,10 @@ class TestBuilder(Builder):
         else:
             assert version == image.current_version
 
-        logging.debug('Faking build for image %s, version %s', image.name,
-                      version)
-
         id = '{}:{}'.format(image.name, version)
+        logging.info('Built fake artifact %s for image %s:%s', id,
+                     image.name, version)
+
         artifact = {'id': id}
         return [artifact]
 
