@@ -1,5 +1,6 @@
 from collections import namedtuple
 
+from shelver.errors import ConfigurationError
 from shelver.util import deep_merge, freeze
 
 
@@ -35,14 +36,15 @@ class Image(namedtuple('Image', 'name current_version environment description '
         return cls(**d)
 
     @classmethod
-    def load_all(cls, data):
-        if not isinstance(data, dict):
-            raise ValueError('Configuration must be a dict of image specs')
+    def parse_config(cls, config):
+        if not isinstance(config, dict):
+            raise ConfigurationError(
+                'Configuration must be a dictionary of image definitions')
 
-        data = data.copy()
-        defaults = data.pop('defaults', None)
+        config = config.copy()
+        defaults = config.pop('defaults', None)
         images = {}
-        for name, config in data.items():
+        for name, config in config.items():
             config = config.copy()
             config['name'] = name
             images[name] = Image.from_dict(config, defaults=defaults)

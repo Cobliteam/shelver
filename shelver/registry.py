@@ -16,7 +16,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
 
     @classmethod
     def from_config(cls, provider, config, *args, **kwargs):
-        images = Image.load_all(config)
+        images = Image.parse_config(config)
         return cls(provider, images, *args, **kwargs)
 
     def __init__(self, provider, images, **kwargs):
