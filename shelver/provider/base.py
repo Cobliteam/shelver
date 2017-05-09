@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 from shelver.registry import Registry
 from shelver.artifact import Artifact
 from shelver.build import Builder
+from shelver.errors import ConfigurationError
 from shelver.util import AsyncBase
 
 
@@ -28,7 +29,7 @@ class Provider(AsyncBase, metaclass=ABCMeta):
         try:
             provider_cls = cls._providers[name]
         except KeyError:
-            raise RuntimeError("Unknown provider '{}".format(name))
+            raise ConfigurationError("Unknown provider '{}'".format(name))
 
         return provider_cls(*args, **kwargs)
 
@@ -37,16 +38,12 @@ class Provider(AsyncBase, metaclass=ABCMeta):
 
         self.config = config
 
-    @asyncio.coroutine
-    def make_registry(self, image_config, *args, **kwargs):
+    def make_registry(self, images, *args, **kwargs):
         kwargs.setdefault('loop', self._loop)
         kwargs.setdefault('executor', self._executor)
-        registry = self.Registry.from_config(
-            self, image_config, *args, **kwargs)
-        yield from registry.load_existing_artifacts()
+        registry = self.Registry(images, provider=self, **kwargs)
         return registry
 
-    @asyncio.coroutine
     def make_builder(self, *args, **kwargs):
         kwargs.setdefault('loop', self._loop)
         kwargs.setdefault('executor', self._executor)
