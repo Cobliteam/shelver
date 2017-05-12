@@ -69,10 +69,10 @@ class AmazonRegistry(Registry):
         else:
             raise ConfigurationError('AMI filters must be a list or dict')
 
-    def __init__(self, provider, data, ami_filters=None, **kwargs):
-        super().__init__(provider, data, **kwargs)
+    def __init__(self, *args, ami_filters=None, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        self.region = provider.region
+        self.region = self.provider.region
         self.ami_filters = self.prepare_ami_filters(ami_filters)
 
     def _get_image_for_ami(self, ami):
