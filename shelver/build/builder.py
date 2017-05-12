@@ -60,6 +60,12 @@ class Builder(AsyncBase):
 
         self._build_tmp_dir = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def make_coordinator(self, **kwargs):
         kwargs.setdefault('loop', self._loop)
         kwargs.setdefault('executor', self._executor)
@@ -107,7 +113,6 @@ class Builder(AsyncBase):
             logger.info('Using base artifact: %s', base_artifact)
 
         archive_path = yield from archive.get_or_build()
-        logger.info('Generated provision archive: %s', archive_path)
 
         # Prepare packer template
         context = {
