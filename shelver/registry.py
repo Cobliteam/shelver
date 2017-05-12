@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 
 from distutils.version import LooseVersion
 from shelver.image import Image
-from shelver.util import AsyncBase, freeze
+from shelver.util import AsyncBase, freeze, topological_sort
 from shelver.errors import (ConfigurationError, UnknownArtifactError,
                             UnknownImageError)
 
@@ -14,11 +14,6 @@ class Registry(AsyncBase, metaclass=ABCMeta):
 
     version_key = LooseVersion
 
-    @classmethod
-    def from_config(cls, provider, config, *args, **kwargs):
-        images = Image.parse_config(config)
-        return cls(provider, images, *args, **kwargs)
-
     def __init__(self, images, *, provider, **kwargs):
         super().__init__(**kwargs)
 
@@ -27,8 +22,6 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         self._image_set = frozenset(self._images.values())
         self._versions = defaultdict(dict)
         self._artifacts = {}
-
-        # self._check_cycles()
 
     @property
     def images(self):
@@ -158,3 +151,23 @@ class Registry(AsyncBase, metaclass=ABCMeta):
             base_artifact = self.get_artifact(image.base)
 
         return base_artifact
+
+    def check_cycles(self):
+        edges = defaultdict(list)
+        for image in self._image_set:
+            base_name, base_version = image.base_with_version
+            if not base_name:
+                continue
+
+            if base_name in self._artifacts:
+                continue
+
+            base_image = self.get_image(base_name)
+            edges[base_image].append(image)
+
+        # Will raise when a cycle is found
+        result, cycles = topological_sort(self._image_set, edges)
+        if cycles:
+            cycles_msg = ', '.join(map(' <- '.join, cycles.items()))
+            raise ConfigurationError(
+                'Image dependency graph contains cycles: {}'.format(cycles_msg))
