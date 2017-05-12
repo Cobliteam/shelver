@@ -172,7 +172,13 @@ class Builder(AsyncBase):
         f = yield from aiofiles.open(fd, 'w', encoding='utf-8',
                                      loop=self._loop, executor=self._executor)
         try:
-            content = json.dumps(data, indent=2)
+            def default(o):
+                if isinstance(o, Mapping) and not isinstance(o, dict):
+                    return dict(o)
+
+                raise TypeError
+
+            content = json.dumps(data, default=default, indent=2)
             logger.debug('Generated packer template: \n%s', content)
 
             yield from f.write(content)
