@@ -1,8 +1,10 @@
+import sys
 import subprocess
 import asyncio
 from itertools import chain
 from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
 from types import MappingProxyType
+from signal import SIGHUP, SIGINT, SIGTERM
 
 
 class FrozenDict(Mapping):  # pragma: nocover
@@ -42,6 +44,49 @@ class AsyncBase():
 
     def delay(self, fn, *args):
         return self._loop.run_in_executor(self._executor, fn, *args)
+
+
+class LoopManager(object):
+    def __init__(self, loop, timeout=60):
+        self.loop = loop
+        self.timeout = timeout
+        self.cancelled = False
+
+    def __enter__(self):
+        self.loop.add_signal_handler(SIGHUP, self.cancel)
+        self.loop.add_signal_handler(SIGTERM, self.cancel)
+        self.loop.add_signal_handler(SIGINT, self.cancel)
+        return self
+
+    def __exit__(self, exc_info, exc_val, exc_tb):
+        self.shutdown()
+
+    def cancel(self):
+        if self.loop.is_closed():
+            return
+
+        if self.cancelled:
+            self.shutdown()
+            return
+
+        self.cancelled = True
+        print('Received interrupt, stopping tasks', file=sys.stderr)
+        sys.stderr.flush()
+
+        tasks = list(asyncio.Task.all_tasks())
+        for task in tasks:
+            task.cancel()
+
+        self.loop.call_later(self.timeout, self.shutdown)
+
+    def shutdown(self):
+        if self.loop.is_closed():
+            return
+
+        if hasattr(self.loop, 'shutdown_asyncgens'):
+            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
+
+        self.loop.close()
 
 
 def is_collection(v):
