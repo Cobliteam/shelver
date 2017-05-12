@@ -6,11 +6,11 @@ class ConfigurationError(ShelverError):
     pass
 
 
-class UnknownArtifactError(KeyError, ShelverError):
+class UnknownArtifactError(ShelverError):
     pass
 
 
-class UnknownImageError(KeyError, ShelverError):
+class UnknownImageError(ShelverError):
     pass
 
 
