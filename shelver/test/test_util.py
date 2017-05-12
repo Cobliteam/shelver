@@ -105,3 +105,32 @@ def test_deep_merge(left, right, merged):
 def test_freeze(obj, frozen):
     res = freeze(obj)
     assert res == frozen and type(res) == type(frozen)
+
+
+@pytest.mark.parametrize('nodes,edges,result', [
+    # trivial case
+    (['a'], {}, [{'a'}]),
+    # no dependencies
+    (['a', 'b'], {}, [{'a', 'b'}]),
+    # direct dependency
+    (['a', 'b'], {'b': ['a']}, [{'a'}, {'b'}]),
+    # 1 common dependency, 1 disconnected node
+    (['a', 'b', 'c', 'd'],
+     {'b': ['a'], 'c': ['a']},
+     [{'a', 'd'}, {'b', 'c'}]),
+    # multiple dependencies
+    (['a', 'b', 'c'],
+     {'c': ['a', 'b']},
+     [{'a', 'b'}, {'c'}]),
+    # cycle
+    (['a', 'b', 'c'],
+     {'a': 'b', 'b': 'c', 'c': 'a'},
+     None),
+
+])
+def test_topological_sort(nodes, edges, result):
+    if result is not None:
+        assert topological_sort(nodes, edges) == result
+    else:
+        with pytest.raises(ValueError):
+            topological_sort(nodes, edges)

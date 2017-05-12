@@ -1,6 +1,6 @@
 import asyncio
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from distutils.version import LooseVersion
 from shelver.image import Image
