@@ -26,7 +26,7 @@ class FrozenDict(Mapping):  # pragma: nocover
         return self._hash
 
     def __repr__(self):
-        return '{}({})'.format(type(self), repr(self._data))
+        return '{}({})'.format(type(self).__name__, repr(self._data))
 
     def __eq__(self, other):
         if isinstance(other, type(self)):
