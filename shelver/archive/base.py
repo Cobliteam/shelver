@@ -76,9 +76,13 @@ class Archive(AsyncBase, metaclass=ABCMeta):
                     mv = self._loop.run_in_executor(
                         self._executor, shutil.move, tmp_archive, path)
                     yield from mv
+
+                    logger.info('Generated provision archive: %s', path)
                 finally:
                     lock.release()
         except FileExistsError:
+            logger.info('Using cached provision archive: %s', path)
+
             with open(path, 'rb') as f:
                 # Acquire the read lock and release it immediately, just to wait
                 # until a running build finishes
