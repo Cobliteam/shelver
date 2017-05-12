@@ -5,14 +5,18 @@ import logging
 import asyncio
 from functools import partial
 from fnmatch import fnmatch
+from signal import SIGHUP, SIGINT, SIGTERM
 
 import yaml
+from shelver.image import Image
 from shelver.provider import Provider
 from shelver.build import Coordinator
 from shelver.errors import ShelverError
+from shelver.util import LoopManager
 
 
 logger = logging.getLogger('shelver.cli')
+
 
 
 def _filter_img(patterns, image):
@@ -23,7 +27,7 @@ def _build_done(image, fut):
     try:
         artifacts = fut.result()
         for artifact in artifacts:
-            print('Built succeeded for image {}: {}'.format(
+            print('Build succeeded for image {}: {}'.format(
                 image.name, artifact))
     except ShelverError as e:
         print('Build failed for image {}: {}'.format(
@@ -37,18 +41,15 @@ def do_build(opts, provider, config):
     if not opts.images:
         opts.images = ['*']
 
-    loop = provider._loop
-    registry = provider.make_registry(config)
+    registry = provider.make_registry(Image.parse_config(config))
     yield from registry.load_existing_artifacts()
-    builder = yield from provider.make_builder(
-        registry,
-        base_dir=opts.base_dir,
-        tmp_dir=opts.tmp_dir,
-        cache_dir=opts.cache_dir,
-        keep_tmp=opts.keep_tmp,
-        packer_cmd=opts.packer_cmd)
 
-    try:
+    with provider.make_builder(registry,
+                               base_dir=opts.base_dir,
+                               tmp_dir=opts.tmp_dir,
+                               cache_dir=opts.cache_dir,
+                               keep_tmp=opts.keep_tmp,
+                               packer_cmd=opts.packer_cmd) as builder:
         coordinator = builder.make_coordinator(max_builds=opts.max_builds)
         for name, image in registry.images.items():
             if not _filter_img(opts.images, image):
@@ -62,19 +63,12 @@ def do_build(opts, provider, config):
             build = coordinator.get_or_run_build(image)
             build.add_done_callback(partial(_build_done, image))
 
-        results = yield from coordinator.run_all()
-        for result in results:
-            if result.cancelled() or result.exception():
-                return 1
-
-        return 0
-    finally:
-        builder.close()
+        yield from coordinator.run_all()
 
 
 @asyncio.coroutine
 def do_list(opts, provider, config):
-    registry = provider.make_registry(config)
+    registry = provider.make_registry(Image.parse_config(config))
     yield from registry.load_existing_artifacts()
 
     images = sorted(registry.images.items())
@@ -92,15 +86,8 @@ def do_list(opts, provider, config):
     for artifact in sorted(artifacts, key=lambda a: a.name):
         print(artifact)
 
-    return 0
 
-
-def main():
-    logging.basicConfig(level=logging.INFO)
-    logging.getLogger('shelver').setLevel(logging.DEBUG)
-    logging.getLogger('botocore').setLevel(logging.WARN)
-    logging.getLogger('boto3').setLevel(logging.WARN)
-
+def parse_args():
     args = argparse.ArgumentParser(
         description='Cloud compute image continuous delivery assistant for '
                     'Packer')
@@ -144,12 +131,18 @@ def main():
              'patterns. Images that serve as bases for other images will be '
              'automatically included if any image that requires them is '
              'included, wether they match the patterns or not')
-
     cmds.add_parser('list')
 
-    ##
+    return args.parse_args()
 
-    opts = args.parse_args()
+
+def main():
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger('shelver').setLevel(logging.DEBUG)
+    logging.getLogger('botocore').setLevel(logging.WARN)
+    logging.getLogger('boto3').setLevel(logging.WARN)
+
+    opts = parse_args()
     if not opts.base_dir:
         opts.base_dir = os.path.dirname(os.path.abspath(opts.config))
 
@@ -168,30 +161,24 @@ def main():
     ##
 
     loop = asyncio.get_event_loop()
-    provider = Provider.new(opts.provider, config=provider_config, loop=loop)
+    with LoopManager(loop):
+        provider = Provider.new(opts.provider, config=provider_config, loop=loop)
+        if opts.command == 'list':
+            run = do_list(opts, provider, config)
+        elif opts.command == 'build':
+            run = do_build(opts, provider, config)
+        else:
+            print("Error: invalid command '{}'".format(opts.command),
+                  file=sys.stderr)
+            return 1
 
-    if opts.command == 'list':
-        run = do_list(opts, provider, config)
-    elif opts.command == 'build':
-        run = do_build(opts, provider, config)
-    else:
-        print("Error: invalid command '{}'".format(opts.command),
-              file=sys.stderr)
-        return 1
-
-    run_fut = asyncio.ensure_future(run, loop=loop)
-    try:
-        status = loop.run_until_complete(run_fut)
-        return status
-    except KeyboardInterrupt:
-        print('Received interrupt, stopping tasks', file=sys.stderr)
-        run_fut.cancel()
-        loop.run_forever()
-        run_fut.exception()
-        return 1
-    except Exception:
-        logger.exception('Unexpected exception')
-        run_fut.cancel()
-        loop.run_forever()
-        run_fut.exception()
-        return 1
+        run_fut = asyncio.ensure_future(run, loop=loop)
+        try:
+            loop.run_until_complete(run_fut)
+            return 0
+        except ShelverError as e:
+            # Already logged in the _build_done callback
+            return 1
+        except Exception as e:
+            logger.exception('Unexpected exception')
+            return 1
