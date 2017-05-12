@@ -27,6 +27,8 @@ class Coordinator(AsyncBase):
 
     @asyncio.coroutine
     def run_all(self):
+        self.registry.check_cycles()
+
         try:
             yield from self._wait_builds()
         except asyncio.CancelledError:
