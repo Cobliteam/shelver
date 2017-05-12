@@ -24,5 +24,10 @@ class PackerError(ShelverError):
         self.errors = errors
 
     def __str__(self):
-        return 'Packer failed with exit code {}. Reported errors: {}'.format(
-            self.exitcode, '\n'.join(self.errors))
+        msg = ''
+        if self.errors:
+            errors = '\n'.join(map('- {}'.format, self.errors))
+            msg = ' Reported errors:\n' + errors
+
+        return 'Packer failed with exit code {}.{}'.format(
+            self.exitcode, msg)
