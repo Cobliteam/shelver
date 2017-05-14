@@ -75,8 +75,10 @@ class Coordinator(AsyncBase):
             if base_artifact:
                 return base_artifact
 
-            build = yield from self.get_or_run_build(base_image, base_version)
-            yield from build
+            artifacts = yield from self.get_or_run_build(
+                base_image, base_version)
+            if len(artifacts) == 1:
+                return artifacts[0]
 
             return self.registry.get_image_artifact(base_image, base_version)
         else:
