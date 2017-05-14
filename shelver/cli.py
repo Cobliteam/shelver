@@ -25,15 +25,16 @@ def _filter_img(patterns, image):
 
 def _build_done(image, fut):
     try:
-        artifacts = fut.result()
+        artifacts = list(fut.result())
+        print('{}: Build succeeded, {} artifacts produced'.format(
+            image.name, len(artifacts)))
         for artifact in artifacts:
-            print('Build succeeded for image {}: {}'.format(
-                image.name, artifact))
+            print('{}: {}'.format(image.name, artifact.id))
     except ShelverError as e:
-        print('Build failed for image {}: {}'.format(
-            image.name, e))
+        print('{}: Build failed: {}'.format(image.name, e))
     except Exception:
-        logger.exception('Build failed with unexpected exception')
+        logger.exception('%s: Build failed with unexpected exception',
+                         image.name)
 
 
 @asyncio.coroutine
