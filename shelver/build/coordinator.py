@@ -55,7 +55,7 @@ class Coordinator(AsyncBase):
             return build
 
     @asyncio.coroutine
-    def _get_base_artifact(self, image, version):
+    def _get_base_artifact(self, image):
         base_name, base_version = image.base_with_version
         if not base_name:
             return None
@@ -98,8 +98,8 @@ class Coordinator(AsyncBase):
         # the build semaphore, so delay our own call until we'll actually start
         # to build.
         try:
-            base_artifact = yield from self._get_base_artifact(image, version)
-        except PackerError:
+            base_artifact = yield from self._get_base_artifact(image)
+        except ShelverError:
             raise ShelverError(
                 'Build for base image {} failed'.format(image.base))
 
