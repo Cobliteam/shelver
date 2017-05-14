@@ -22,8 +22,9 @@ class Coordinator(AsyncBase):
         self._builds = {}
 
     def _wait_builds(self, timeout=None):
-        return asyncio.wait_for(asyncio.gather(*self._builds.values()),
-                                timeout=timeout, loop=self._loop)
+        return asyncio.wait_for(
+            asyncio.gather(*self._builds.values(), return_exceptions=True),
+            timeout=timeout, loop=self._loop)
 
     @asyncio.coroutine
     def run_all(self):
