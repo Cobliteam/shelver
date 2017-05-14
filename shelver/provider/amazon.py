@@ -32,18 +32,17 @@ def _get_tag_by_key(tags, key):
 
 
 class AmazonArtifact(Artifact):
-    def __init__(self, provider, ami, image=None):
+    def __init__(self, ami, image=None, **kwargs):
         if image:
-            name = None
-            version = _get_tag_by_key(ami.tags, AMI_VERSION_TAG)
-            environment = _get_tag_by_key(ami.tags, AMI_ENVIRONMENT_TAG)
+            kwargs['version'] = _get_tag_by_key(ami.tags, AMI_VERSION_TAG)
+            kwargs['environment'] = _get_tag_by_key(ami.tags,
+                                                    AMI_ENVIRONMENT_TAG)
         else:
-            name = ami.name
-            version = None
-            environment = None
+            kwargs['name'] = ami.name
+            kwargs['version'] = None
+            kwargs['environment'] = None
 
-        super().__init__(provider, name=name, image=image, version=version,
-                         environment=environment)
+        super().__init__(image=image, **kwargs)
 
         self._ami = ami
 
@@ -83,7 +82,7 @@ class AmazonRegistry(Registry):
         return self.get_image(name_tag)
 
     def _register_ami(self, ami, image=None):
-        artifact = AmazonArtifact(self.provider, ami, image=image)
+        artifact = AmazonArtifact(ami, image=image, provider=self.provider)
         self.register_artifact(artifact)
         if image:
             self.associate_artifact(artifact, image=image)
