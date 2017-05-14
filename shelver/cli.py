@@ -5,12 +5,10 @@ import logging
 import asyncio
 from functools import partial
 from fnmatch import fnmatch
-from signal import SIGHUP, SIGINT, SIGTERM
 
 import yaml
-from shelver.image import Image
 from shelver.provider import Provider
-from shelver.build import Coordinator
+from shelver.image import Image
 from shelver.errors import ShelverError
 from shelver.util import AsyncLoopSupervisor
 
