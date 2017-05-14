@@ -3,8 +3,7 @@ import subprocess
 import asyncio
 from itertools import chain
 from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
-from types import MappingProxyType
-from signal import SIGHUP, SIGINT, SIGTERM
+from signal import SIGHUP, SIGINT
 
 
 class FrozenDict(Mapping):  # pragma: nocover
@@ -39,54 +38,51 @@ class FrozenDict(Mapping):  # pragma: nocover
 
 class AsyncBase():
     def __init__(self, **kwargs):
-        self._loop = kwargs.pop('loop', asyncio.get_event_loop())
+        self._loop = kwargs.pop('loop', None) or  asyncio.get_event_loop()
         self._executor = kwargs.pop('executor', None)
 
     def delay(self, fn, *args):
         return self._loop.run_in_executor(self._executor, fn, *args)
 
 
-class LoopManager(object):
+class AsyncLoopSupervisor(object):
     def __init__(self, loop, timeout=60):
-        self.loop = loop
-        self.timeout = timeout
-        self.cancelled = False
+        self.loop = loop  # type: asyncio.AbstractEventLoop
+        self.timeout = timeout  # type: int
+
+    @staticmethod
+    def _interrupt():
+        raise KeyboardInterrupt
+
+    def supervise(self, run_until):
+        run_fut = asyncio.ensure_future(run_until, loop=self.loop)
+        self.loop.add_signal_handler(SIGHUP, self._interrupt)
+        self.loop.add_signal_handler(SIGINT, self._interrupt)
+        try:
+            return self.loop.run_until_complete(run_fut)
+        except KeyboardInterrupt:
+            print('Interrupted, waiting for tasks to stop', file=sys.stderr)
+            sys.stderr.flush()
+
+            self.loop.call_later(self.timeout, self.loop.stop)
+            run_fut.cancel()
+            return self.loop.run_until_complete(run_fut)
+        finally:
+            if hasattr(self.loop, 'shutdown_asyncgens'):
+                self.loop.run_until_complete(self.loop.shutdown_asyncgens())
+
+            self.loop.remove_signal_handler(SIGHUP)
+            self.loop.remove_signal_handler(SIGINT)
+
+            self.loop.stop()
 
     def __enter__(self):
-        self.loop.add_signal_handler(SIGHUP, self.cancel)
-        self.loop.add_signal_handler(SIGTERM, self.cancel)
-        self.loop.add_signal_handler(SIGINT, self.cancel)
         return self
 
     def __exit__(self, exc_info, exc_val, exc_tb):
-        self.shutdown()
-
-    def cancel(self):
-        if self.loop.is_closed():
-            return
-
-        if self.cancelled:
-            self.shutdown()
-            return
-
-        self.cancelled = True
-        print('Received interrupt, stopping tasks', file=sys.stderr)
-        sys.stderr.flush()
-
-        tasks = list(asyncio.Task.all_tasks())
-        for task in tasks:
-            task.cancel()
-
-        self.loop.call_later(self.timeout, self.shutdown)
-
-    def shutdown(self):
-        if self.loop.is_closed():
-            return
-
-        if hasattr(self.loop, 'shutdown_asyncgens'):
-            self.loop.run_until_complete(self.loop.shutdown_asyncgens())
-
         self.loop.close()
+
+        return False
 
 
 def is_collection(v):
