@@ -38,7 +38,7 @@ def provider():
 
 @pytest.fixture
 def registry(provider):
-    return provider.make_registry(provider, images)
+    return provider.make_registry(images)
 
 
 @pytest.fixture
