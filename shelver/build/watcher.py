@@ -1,7 +1,11 @@
+import signal
+import logging
 import asyncio
-from signal import SIGINT, SIGKILL
 
 from shelver.errors import PackerError
+
+
+logger = logging.getLogger('shelver.build.watcher')
 
 
 class Watcher(object):
@@ -32,6 +36,7 @@ class Watcher(object):
         self._msg_stream = msg_stream
         self._log_stream = log_stream
         self._loop = loop or asyncio.get_event_loop()
+        self._future = None
 
     @staticmethod
     def _parse_line(line):
@@ -111,25 +116,37 @@ class Watcher(object):
 
             yield from self.write_message(line)
 
+    @staticmethod
+    def _send_signal(proc, signame):
+        sig = getattr(signal, signame)
+        logger.debug('Sending %s to pid %d', signame, proc.pid)
+        proc.send_signal(sig)
+
     @asyncio.coroutine
-    def run(self, proc, canceled=False):
+    def run(self, proc):
+        io = asyncio.gather(
+            self.handle_stdout(proc.stdout),
+            self.handle_stderr(proc.stderr),
+            loop=self._loop)
+
         try:
-            yield from asyncio.gather(self.handle_stdout(proc.stdout),
-                                      self.handle_stderr(proc.stderr),
-                                      loop=self._loop)
-
             ret = yield from proc.wait()
-            if ret != 0:
-                self.errors.append('Command failed')
-                raise PackerError(ret, self.errors)
-
-            return self.artifacts
         except asyncio.CancelledError:
-            if canceled:
-                proc.send_signal(SIGKILL)
-                raise
+            self.errors.append('Canceled by user')
+            self._send_signal(proc, 'SIGINT')
 
-            proc.send_signal(SIGINT)
-            yield from self.run(proc, canceled=True)
+            try:
+                ret = yield from asyncio.wait_for(
+                    proc.wait(), self.kill_timeout)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                self._send_signal(proc, 'SIGKILL')
+                raise PackerError(255, self.errors)
+        finally:
+            yield from io
+            io.exception()
 
+        if ret != 0:
+            raise PackerError(ret, self.errors)
+
+        return self.artifacts
 
