@@ -12,7 +12,7 @@ from shelver.image import Image
 from shelver.provider import Provider
 from shelver.build import Coordinator
 from shelver.errors import ShelverError
-from shelver.util import LoopManager
+from shelver.util import AsyncLoopSupervisor
 
 
 logger = logging.getLogger('shelver.cli')
@@ -162,8 +162,9 @@ def main():
     ##
 
     loop = asyncio.get_event_loop()
-    with LoopManager(loop):
-        provider = Provider.new(opts.provider, config=provider_config, loop=loop)
+    with AsyncLoopSupervisor(loop) as supervisor:
+        provider = Provider.new(opts.provider, config=provider_config,
+                                loop=loop)
         if opts.command == 'list':
             run = do_list(opts, provider, config)
         elif opts.command == 'build':
@@ -173,12 +174,10 @@ def main():
                   file=sys.stderr)
             return 1
 
-        run_fut = asyncio.ensure_future(run, loop=loop)
         try:
-            loop.run_until_complete(run_fut)
-            return 0
+            return supervisor.supervise(run)
         except ShelverError as e:
-            # Already logged in the _build_done callback
+            print('Error: {}'.format(e))
             return 1
         except Exception as e:
             logger.exception('Unexpected exception')
