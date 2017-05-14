@@ -16,7 +16,6 @@ from shelver.util import AsyncLoopSupervisor
 logger = logging.getLogger('shelver.cli')
 
 
-
 def _filter_img(patterns, image):
     return any(fnmatch(image.name, pat) for pat in patterns)
 
@@ -62,7 +61,13 @@ def do_build(opts, provider, config):
             build = coordinator.get_or_run_build(image)
             build.add_done_callback(partial(_build_done, image))
 
-        yield from coordinator.run_all()
+        # Return a failed exit code if any of the builds failed
+        results = yield from coordinator.run_all()
+        for result in results.values():
+            if result.cancelled() or result.exception():
+                return 1
+
+        return 0
 
 
 @asyncio.coroutine
@@ -84,6 +89,8 @@ def do_list(opts, provider, config):
     print('==', 'Unmanaged artifacts')
     for artifact in sorted(artifacts, key=lambda a: a.name):
         print(artifact)
+
+    return 0
 
 
 def parse_args():
