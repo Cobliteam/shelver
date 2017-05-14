@@ -22,8 +22,8 @@ class Coordinator(AsyncBase):
         self._builds = {}
 
     def _wait_builds(self, timeout=None):
-        return asyncio.wait_for(
-            asyncio.gather(*self._builds.values()), timeout=timeout)
+        return asyncio.wait_for(asyncio.gather(*self._builds.values()),
+                                timeout=timeout, loop=self._loop)
 
     @asyncio.coroutine
     def run_all(self):
@@ -32,16 +32,10 @@ class Coordinator(AsyncBase):
         try:
             yield from self._wait_builds()
         except asyncio.CancelledError:
-            # Don't stop builds on the first cancel. Wait a timeout before
-            # killling them.
-
+            # Give some time for builds to stop gracefully, but do not accept
+            # any new builds.
             self.stopping = True
-            try:
-                yield from self._wait_builds(self.cancel_timeout)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                # If the timeout is reached, cancel all builds and ourselves
-                for build in self._builds.values():
-                    build.cancel()
+            yield from self._wait_builds(self.cancel_timeout)
 
         return self._builds
 
@@ -53,7 +47,8 @@ class Coordinator(AsyncBase):
             return self._builds[(image.name, version)]
         except KeyError:
             if self.stopping:
-                raise asyncio.InvalidStateError('Coordinator is closed')
+                raise asyncio.InvalidStateError(
+                    'Coordinator is stopping, cannot accept new builds')
 
             build = self._builds[(image.name, version)] = \
                 asyncio.ensure_future(self._run_build(image, version))
