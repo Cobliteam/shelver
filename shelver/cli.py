@@ -3,7 +3,7 @@ import os
 import argparse
 import logging
 import asyncio
-from functools import partial
+from asyncio.futures import CancelledError, TimeoutError
 from fnmatch import fnmatch
 
 import yaml
@@ -16,11 +16,7 @@ from shelver.util import AsyncLoopSupervisor
 logger = logging.getLogger('shelver.cli')
 
 
-def _filter_img(patterns, image):
-    return any(fnmatch(image.name, pat) for pat in patterns)
-
-
-def _build_done(image, fut):
+def _build_done(image, version, fut):
     try:
         artifacts = list(fut.result())
         print('{}: Build succeeded, {} artifacts produced'.format(
@@ -29,9 +25,11 @@ def _build_done(image, fut):
             print('{}: {}'.format(image.name, artifact.id))
     except ShelverError as e:
         print('{}: Build failed: {}'.format(image.name, e))
-    except Exception:
-        logger.exception('%s: Build failed with unexpected exception',
-                         image.name)
+    except CancelledError:
+        print('{}: Build cancelled'.format(image.name))
+    except Exception as e:
+        print('{}: Build failed with unexpected exception: {}'.format(
+            image.name, e))
 
 
 @asyncio.coroutine
@@ -48,26 +46,36 @@ def do_build(opts, provider, config):
                                cache_dir=opts.cache_dir,
                                keep_tmp=opts.keep_tmp,
                                packer_cmd=opts.packer_cmd) as builder:
-        coordinator = builder.make_coordinator(max_builds=opts.max_builds)
+        coordinator = builder.make_coordinator(max_builds=opts.max_builds,
+                                               cancel_timeout=60)
+        coordinator.add_build_done_callback(_build_done)
+
         for name, image in registry.images.items():
-            if not _filter_img(opts.images, image):
+            # Image was not specified in command line, do not build it
+            if not any(fnmatch(image.name, pattern) for pattern in opts.images):
                 continue
 
+            # Image is already built, do not build it
             artifact = registry.get_image_artifact(image, default=None)
             if artifact:
                 continue
 
             logger.info('Scheduling build for %s', name)
-            build = coordinator.get_or_run_build(image)
-            build.add_done_callback(partial(_build_done, image))
+            coordinator.get_or_run_build(image)
 
-        # Return a failed exit code if any of the builds failed
-        results = yield from coordinator.run_all()
-        for result in results.values():
-            if result.cancelled() or result.exception():
-                return 1
+        try:
+            # The coordinator already handles cancellation. It will only throw
+            # such an exception if waiting for a graceful finish timed out or
+            # was interrupted by a second signal.
+            results = yield from asyncio.ensure_future(coordinator.run_all())
+        except (CancelledError, TimeoutError):
+            logger.error('Failed to stop builds cleanly, aborting')
+            return 130
 
-        return 0
+        # The _build_done callback already prints results, so just check for
+        # any errors to set the exit code.
+        failed = any(r.cancelled() or r.exception() for r in results)
+        return 1 if failed else 0
 
 
 @asyncio.coroutine
