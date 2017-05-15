@@ -46,9 +46,10 @@ class AsyncBase():
 
 
 class AsyncLoopSupervisor(object):
-    def __init__(self, loop, timeout=60):
+    def __init__(self, loop, timeout=65):
         self.loop = loop  # type: asyncio.AbstractEventLoop
         self.timeout = timeout  # type: int
+        self._timeout_handle = None
 
     @staticmethod
     def _interrupt():
@@ -58,21 +59,26 @@ class AsyncLoopSupervisor(object):
         run_fut = asyncio.ensure_future(run_until, loop=self.loop)
         self.loop.add_signal_handler(SIGHUP, self._interrupt)
         self.loop.add_signal_handler(SIGINT, self._interrupt)
-        try:
-            return self.loop.run_until_complete(run_fut)
-        except KeyboardInterrupt:
-            print('Interrupted, waiting for tasks to stop', file=sys.stderr)
-            sys.stderr.flush()
 
-            self.loop.call_later(self.timeout, self.loop.stop)
-            run_fut.cancel()
-            return self.loop.run_until_complete(run_fut)
+        try:
+            while True:
+                try:
+                    return self.loop.run_until_complete(run_fut)
+                except KeyboardInterrupt:
+                    if not self._timeout_handle:
+                        self._timeout_handle = self.loop.call_later(
+                            self.timeout, self.loop.stop)
+
+                    run_fut.cancel()
         finally:
+            self.loop.remove_signal_handler(SIGHUP)
+            self.loop.remove_signal_handler(SIGINT)
+
             if hasattr(self.loop, 'shutdown_asyncgens'):
                 self.loop.run_until_complete(self.loop.shutdown_asyncgens())
 
-            self.loop.remove_signal_handler(SIGHUP)
-            self.loop.remove_signal_handler(SIGINT)
+            if self._timeout_handle:
+                self._timeout_handle.cancel()
 
             self.loop.stop()
 
