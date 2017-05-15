@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from functools import partial
 
 from shelver.errors import ConfigurationError, PackerError, ShelverError
 from shelver.util import AsyncBase
@@ -20,40 +21,9 @@ class Coordinator(AsyncBase):
         self._build_counter = asyncio.BoundedSemaphore(
             max_builds or 999, loop=self._loop)
         self._builds = {}
-
-    def _wait_builds(self, timeout=None):
-        return asyncio.wait_for(
-            asyncio.gather(*self._builds.values(), return_exceptions=True),
-            timeout=timeout, loop=self._loop)
-
-    @asyncio.coroutine
-    def run_all(self):
-        self.registry.check_cycles()
-
-        try:
-            yield from self._wait_builds()
-        except asyncio.CancelledError:
-            # Give some time for builds to stop gracefully, but do not accept
-            # any new builds.
-            self.stopping = True
-            yield from self._wait_builds(self.cancel_timeout)
-
-        return self._builds
-
-    def get_or_run_build(self, image, version=None):
-        if not version:
-            version = image.current_version
-
-        try:
-            return self._builds[(image.name, version)]
-        except KeyError:
-            if self.stopping:
-                raise asyncio.InvalidStateError(
-                    'Coordinator is stopping, cannot accept new builds')
-
-            build = self._builds[(image.name, version)] = \
-                asyncio.ensure_future(self._run_build(image, version))
-            return build
+        self._build_callbacks = set()
+        self._pending = set()
+        self._all_finished = asyncio.Future(loop=self._loop)
 
     @asyncio.coroutine
     def _get_base_artifact(self, image):
@@ -102,7 +72,7 @@ class Coordinator(AsyncBase):
         # to build.
         try:
             base_artifact = yield from self._get_base_artifact(image)
-        except ShelverError:
+        except (ShelverError, asyncio.CancelledError):
             raise ShelverError(
                 'Build for base image {} failed'.format(image.base))
 
@@ -127,3 +97,61 @@ class Coordinator(AsyncBase):
                             result)
 
         return artifacts
+
+    def _on_build_finish(self, f):
+        if self._all_finished.done():
+            return
+
+        self._pending.remove(f)
+        if not self._pending:
+            self._all_finished.set_result(self._builds.copy())
+
+    def get_or_run_build(self, image, version=None):
+        if not version:
+            version = image.current_version
+
+        try:
+            return self._builds[(image, version)]
+        except KeyError:
+            if self.stopping:
+                raise asyncio.InvalidStateError(
+                    'Coordinator is stopping, cannot accept new builds')
+
+            f = asyncio.ensure_future(self._run_build(image, version),
+                                      loop=self._loop)
+            f.add_done_callback(self._on_build_finish)
+            for fn in self._build_callbacks:
+                f.add_done_callback(partial(fn, image, version))
+
+            self._pending.add(f)
+            self._builds[(image, version)] = f
+            return f
+
+    def add_build_done_callback(self, fn):
+        self._build_callbacks.add(fn)
+
+    @asyncio.coroutine
+    def run_all(self):
+        try:
+            # We can't just use asyncio.gather with the futures in
+            # self._pending because new builds might be triggered for
+            # dependencies. We manually set the self._all_finished future
+            # whenever we exhaust self._pending instead.
+            yield from asyncio.shield(self._all_finished)
+        except asyncio.CancelledError:
+            # Pass the first cancellation through to the builds. They should
+            # start stopping their processes and eventually return, even if they
+            # don't cancel immediately
+            for f in self._pending:
+                f.cancel()
+
+            # Setting the stopping flag ensure no new builds can be triggered,
+            # and we can correctly await for everything in self._pending.
+            self.stopping = True
+
+            # gather will already forward the second cancellation to all the
+            # builds, which should trigger an immediate failure.
+            yield from asyncio.wait_for(asyncio.gather(*self._pending),
+                                        self.cancel_timeout)
+
+        return self._builds
