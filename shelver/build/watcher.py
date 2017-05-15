@@ -24,13 +24,11 @@ class Watcher(object):
         start = cls.COLORS[hash(s) % len(cls.COLORS)]
         return start + s + cls.COLOR_RESET
 
-    def __init__(self, prefix, msg_stream, log_stream, *,
-                 kill_timeout=60, loop=None):
+    def __init__(self, prefix, msg_stream, log_stream, *, loop=None):
         if not isinstance(prefix, bytes):
             prefix = prefix.encode('utf-8')
 
         self.prefix = prefix
-        self.kill_timeout = kill_timeout
         self.errors = []
         self.artifacts = []
         self._msg_stream = msg_stream
@@ -130,23 +128,28 @@ class Watcher(object):
             loop=self._loop)
 
         try:
-            ret = yield from proc.wait()
+            # Wait until we finish consuming IO and the processes finishes,
+            # but shield the IO from cancellation, as we will keep running
+            # after sending the SIGINT and waiting for Packer to finish
+            # gracefully
+            _, ret = yield from asyncio.gather(asyncio.shield(io),
+                                               proc.wait())
         except asyncio.CancelledError:
-            self.errors.append('Canceled by user')
+            self.errors.append('Canceled by signal')
             self._send_signal(proc, 'SIGINT')
 
             try:
-                ret = yield from asyncio.wait_for(
-                    proc.wait(), self.kill_timeout)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+                # Cancel everything right away when we receive the second
+                # cancellation (either from the user, or from a timeout from
+                # an outer layer)
+                _, ret = yield from asyncio.gather(io, proc.wait())
+            except asyncio.CancelledError:
+                # Kill the process with prejudice for immediate return.
                 self._send_signal(proc, 'SIGKILL')
-                raise PackerError(255, self.errors)
-        finally:
-            yield from io
-            io.exception()
+                yield from proc.wait()
+                raise
 
         if ret != 0:
             raise PackerError(ret, self.errors)
 
         return self.artifacts
-
