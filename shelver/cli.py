@@ -2,6 +2,7 @@ import sys
 import os
 import argparse
 import logging
+import json
 import asyncio
 from asyncio.futures import CancelledError, TimeoutError
 from fnmatch import fnmatch
@@ -101,6 +102,29 @@ def do_list(opts, provider, config):
     return 0
 
 
+@asyncio.coroutine
+def do_get_artifact(opts, provider, config):
+    registry = provider.make_registry(Image.parse_config(config))
+    yield from registry.load_existing_artifacts()
+
+    artifact = registry.get_image_artifact(opts.image, version=opts.version,
+                                           default=None)
+    if not artifact:
+        return 1
+
+    if opts.format == 'id':
+        print(artifact.id)
+    elif opts.format == 'json':
+        json.dump(artifact.to_dict(), sys.stdout, indent=2)
+    elif opts.format == 'plain':
+        print(artifact)
+        # TODO: pretty print
+    else:
+        raise ValueError('Invalid format')
+
+    return 0
+
+
 def parse_args():
     args = argparse.ArgumentParser(
         description='Cloud compute image continuous delivery assistant for '
@@ -136,6 +160,7 @@ def parse_args():
         '--packer-cmd', default='packer',
         help='Path to packer executable')
 
+    # build
     cmds = args.add_subparsers(dest='command')
 
     build_cmd = cmds.add_parser('build')
@@ -145,7 +170,23 @@ def parse_args():
              'patterns. Images that serve as bases for other images will be '
              'automatically included if any image that requires them is '
              'included, wether they match the patterns or not')
+
+    # list
     cmds.add_parser('list')
+
+    # get-artifact
+    get_artifact_cmd = cmds.add_parser('get-artifact')
+    get_artifact_cmd.add_argument(
+        'image',
+        help='Name of the image to get artifact for')
+    get_artifact_cmd.add_argument(
+        'version', nargs='?',
+        help='Version of the image to ger artifact for (omit for latest)')
+    get_artifact_cmd.add_argument(
+        '--format', choices=('id', 'plain', 'json'), default='plain',
+        help='What artifact information to display. `id` prints only the '
+             'artifact ID (provider dependent). `plain` prints properties in a '
+             'user-friendly format, and `json` in JSON format')
 
     return args.parse_args()
 
@@ -182,6 +223,8 @@ def main():
             run = do_list(opts, provider, config)
         elif opts.command == 'build':
             run = do_build(opts, provider, config)
+        elif opts.command == 'get-artifact':
+            run = do_get_artifact(opts, provider, config)
         else:
             print("Error: invalid command '{}'".format(opts.command),
                   file=sys.stderr)

@@ -46,8 +46,16 @@ class Artifact(metaclass=ABCMeta):
     def id(self):
         pass
 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'provider': self.provider.name,
+            'image': self.image and self.image.name,
+            'name': self.name,
+            'version': self.version,
+            'environment': self.environment
+        }
+
     def __str__(self):
-        return \
-            '{}(id={}, name={}, image={}, version={}, environment={})'.format(
-                type(self).__name__, self.id, self.name, self.image,
-                self.version, self.environment)
+        props = ('{}={}'.format(k, v) for k, v in self.to_json().items())
+        return '{}({})'.format(type(self).__name__, ', '.join(props))
