@@ -232,11 +232,12 @@ class AmazonBuilder(Builder):
 
 
 class AmazonProvider(Provider):
-    NAMES = ('amazon', 'aws')
+    name = 'amazon'
+    aliases = ('aws',)
 
-    Registry = AmazonRegistry
-    Builder = AmazonBuilder
-    Artifact = AmazonArtifact
+    registry_class = AmazonRegistry
+    builder_class = AmazonBuilder
+    artifact_class = AmazonArtifact
 
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)

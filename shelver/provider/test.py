@@ -56,7 +56,8 @@ class TestBuilder(Builder):
 
 
 class TestProvider(Provider):
-    NAMES = ('test',)
+    name = 'test'
+    aliases = ()
 
     Artifact = TestArtifact
     Registry = TestRegistry

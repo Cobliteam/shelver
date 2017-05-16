@@ -53,7 +53,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         return self._artifacts
 
     def _check_artifact(self, artifact):
-        if not isinstance(artifact, self.provider.Artifact):
+        if not isinstance(artifact, self.provider.artifact_class):
             raise TypeError(
                 'Unsupported artifact type: {}'.format(type(artifact)))
 
