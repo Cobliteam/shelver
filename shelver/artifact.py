@@ -57,5 +57,5 @@ class Artifact(metaclass=ABCMeta):
         }
 
     def __str__(self):
-        props = ('{}={}'.format(k, v) for k, v in self.to_json().items())
+        props = ('{}={}'.format(k, v) for k, v in self.to_dict().items())
         return '{}({})'.format(type(self).__name__, ', '.join(props))
