@@ -217,7 +217,8 @@ class Builder(AsyncBase):
         template_path = \
             yield from self.write_template(packer_data)
 
-        return self.packer_cmd, ['build', '-machine-readable', template_path]
+        cmd = list(self.packer_cmd) + ['build', '-machine-readable', template_path]
+        return cmd[0], cmd[1:]
 
     @asyncio.coroutine
     def run_build(self, image, version, base_artifact=None, msg_stream=None):

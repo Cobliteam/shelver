@@ -17,7 +17,8 @@ setup(
         'pyyaml',
         'Jinja2',
         'boto3',
-        'aiofiles'
+        'aiofiles',
+        'click'
     ],
     scripts=['bin/shelver'],
     keywords='packer aws ami cloud cd continuous-deployment')

@@ -37,9 +37,9 @@ class FrozenDict(Mapping):  # pragma: nocover
 
 
 class AsyncBase():
-    def __init__(self, **kwargs):
-        self._loop = kwargs.pop('loop', None) or  asyncio.get_event_loop()
-        self._executor = kwargs.pop('executor', None)
+    def __init__(self, loop=None, executor=None, **kwargs):
+        self._loop = loop or  asyncio.get_event_loop()
+        self._executor = executor
 
     def delay(self, fn, *args):
         return self._loop.run_in_executor(self._executor, fn, *args)
@@ -79,16 +79,9 @@ class AsyncLoopSupervisor(object):
 
             if self._timeout_handle:
                 self._timeout_handle.cancel()
+                self._timeout_handle = None
 
             self.loop.stop()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_info, exc_val, exc_tb):
-        self.loop.close()
-
-        return False
 
 
 def is_collection(v):
