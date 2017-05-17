@@ -151,7 +151,7 @@ class Coordinator(AsyncBase):
 
             # gather will already forward the second cancellation to all the
             # builds, which should trigger an immediate failure.
-            yield from asyncio.wait_for(asyncio.gather(*self._pending),
+            yield from asyncio.wait_for(asyncio.gather(*self._pending, return_exceptions=True),
                                         self.cancel_timeout)
 
         return self._builds
