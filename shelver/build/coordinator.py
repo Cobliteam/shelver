@@ -10,7 +10,7 @@ logger = logging.getLogger('shelver.build.coordinator')
 
 class Coordinator(AsyncBase):
     def __init__(self, builder, *, msg_stream=None, max_builds=None,
-                 cancel_timeout=60, **kwargs):
+                 cancel_timeout=120, **kwargs):
         super().__init__(**kwargs)
 
         self.builder = builder
