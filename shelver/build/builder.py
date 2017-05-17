@@ -225,7 +225,7 @@ class Builder(AsyncBase):
         close_stream = False
         if not msg_stream:
             msg_stream = yield from aiofiles.open(
-                sys.stdout.fileno(), 'wb', closefd=False, loop=self._loop,
+                sys.stderr.fileno(), 'wb', closefd=False, loop=self._loop,
                 executor=self._executor)
             close_stream = True
 
