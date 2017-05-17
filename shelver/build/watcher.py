@@ -116,6 +116,9 @@ class Watcher(object):
 
     @staticmethod
     def _send_signal(proc, signame):
+        if proc.returncode is not None:
+            return
+
         sig = getattr(signal, signame)
         logger.debug('Sending %s to pid %d', signame, proc.pid)
         proc.send_signal(sig)
