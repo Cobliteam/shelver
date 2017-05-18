@@ -12,6 +12,7 @@ from asyncio.futures import CancelledError, TimeoutError
 import yaml
 import click
 from shelver.provider import Provider
+from shelver.build import Builder
 from shelver.image import Image
 from shelver.errors import ShelverError
 from shelver.util import AsyncLoopSupervisor
@@ -87,15 +88,19 @@ def shelver_async_cmd(f):
          'as allowed by the dependency tree (as base images need to be built before those that '
          'depend on them)')
 @click.option(
-    '--temp-dir', default='./.shelver/tmp',
+    '--temp-dir', default=Builder.default_tmp_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
     help='Directory to store temporary build files, such as in-progress archives, Packer templates '
          'and processed instance metadata')
 @click.option(
-    '--cache-dir', default='./.shelver/cache',
+    '--cache-dir', default=Builder.default_cache_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
     help='Directory to store finished archives and other data that is expensive to build and can '
          'be shared between different invocations')
+@click.option(
+    '--log-dir', default=Builder.default_log_dir('.'),
+    type=click.Path(file_okay=False, writable=True, resolve_path=True),
+    help='Directory to store build logs')
 @click.option(
     '--clean-temp-dir/--no-clean-temp-dir', default=True,
     help='Whether to clean or leave files written to the temp dir after the build is finished. '
@@ -107,7 +112,8 @@ def shelver_async_cmd(f):
          'separated by spaces and quotes according to shell rules (but NOT actually interpreted '
          'by a shell, i.e. variable expansion is not possible)')
 @shelver_async_cmd
-def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, clean_temp_dir, packer_cmd):
+def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir, clean_temp_dir,
+          packer_cmd):
     """
     Build and tag images.
 
@@ -134,8 +140,8 @@ def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, clean_temp_dir, 
 
     loop, provider, registry, base_dir = ctx.find_object(ShelverContext)
     builder = provider.make_builder(registry, base_dir=base_dir, tmp_dir=temp_dir,
-                                    cache_dir=cache_dir, keep_tmp=not clean_temp_dir,
-                                    packer_cmd=packer_cmd)
+                                    cache_dir=cache_dir, log_dir=log_dir,
+                                    keep_tmp=not clean_temp_dir, packer_cmd=packer_cmd)
     with builder:
         yield from registry.load_existing_artifacts()
 
