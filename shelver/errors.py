@@ -7,7 +7,9 @@ class ConfigurationError(ShelverError):
 
 
 class UnknownArtifactError(ShelverError):
-    pass
+    def __init__(self, name, version):
+        self.name = name
+        self.version = version
 
 
 class UnknownImageError(ShelverError):
