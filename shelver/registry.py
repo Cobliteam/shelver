@@ -4,7 +4,7 @@ from collections import defaultdict, deque
 
 from distutils.version import LooseVersion
 from shelver.image import Image
-from shelver.util import AsyncBase, freeze, topological_sort
+from shelver.util import AsyncBase, TopologicalSortError, freeze, topological_sort
 from shelver.errors import (ConfigurationError, UnknownArtifactError,
                             UnknownImageError)
 
@@ -28,10 +28,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         return self._images
 
     def __getitem__(self, key):
-        try:
-            return self._images[key]
-        except KeyError:
-            raise UnknownImageError(key)
+        return self._images[key]
 
     def get_image(self, image, default=_GET_IMAGE_DEFAULT):
         if isinstance(image, Image):
@@ -41,10 +38,10 @@ class Registry(AsyncBase, metaclass=ABCMeta):
             return image
 
         try:
-            return self[image]
+            return self._images[image]
         except KeyError:
             if default is self._GET_IMAGE_DEFAULT:
-                raise
+                raise UnknownImageError(image)
 
             return default
 
@@ -128,7 +125,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
             return versions[version]
         except KeyError:
             if default is self._GET_IMAGE_DEFAULT:
-                raise UnknownArtifactError(image.name + ':' + version)
+                raise UnknownArtifactError(image.name, version)
 
             return default
 
@@ -144,7 +141,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         if not base_name:
             return None
 
-        base_image = self.get_image(base_name, None)
+        base_image = self.get_image(base_name, default=None)
         if base_image:
             base_artifact = self.get_image_artifact(base_image, base_version)
         else:
