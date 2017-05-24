@@ -30,7 +30,8 @@ class Image(namedtuple('Image', 'name current_version environment description '
             actual_defaults = cls.DEFAULTS
 
         d = deep_merge(actual_defaults, data)
-        d['current_version'] = d.pop('version')
+        if 'current_version' not in d:
+            d['current_version'] = d.pop('version')
         d = freeze(d)
 
         return cls(**d)
