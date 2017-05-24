@@ -59,6 +59,6 @@ class TestProvider(Provider):
     name = 'test'
     aliases = ()
 
-    Artifact = TestArtifact
-    Registry = TestRegistry
-    Builder = TestBuilder
+    artifact_class = TestArtifact
+    registry_class = TestRegistry
+    builder_class = TestBuilder
