@@ -1,8 +1,8 @@
 import pytest
 from collections import OrderedDict, Mapping
 
-from shelver.util import (FrozenDict, is_collection, wrap_as_coll, deep_merge,\
-                          freeze)
+from shelver.util import (FrozenDict, TopologicalSortError, is_collection,
+                          wrap_as_coll, deep_merge, freeze, topological_sort)
 
 
 class ListMapping(Mapping):
@@ -130,7 +130,9 @@ def test_freeze(obj, frozen):
 ])
 def test_topological_sort(nodes, edges, result):
     if result is not None:
-        assert topological_sort(nodes, edges) == result
+        assert topological_sort(nodes, edges) == result, None
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(TopologicalSortError) as e:
             topological_sort(nodes, edges)
+
+        assert e.value.cycles

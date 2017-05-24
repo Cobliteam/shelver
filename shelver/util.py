@@ -163,6 +163,11 @@ def freeze(obj):
         raise ValueError('Cannot freeze object of type {}'.format(type(obj)))
 
 
+class TopologicalSortError(ValueError):
+    def __init__(self, cycles):
+        self.cycles = cycles
+
+
 def topological_sort(nodes, edges):
     result = []
     edges = {dest: set(sources) for (dest, sources) in edges.items()}
@@ -177,7 +182,7 @@ def topological_sort(nodes, edges):
             for dest, sources in edges.items():
                 try:
                     sources.remove(leaf)
-                except ValueError:
+                except KeyError:
                     pass
 
         for dest in list(edges):
@@ -186,9 +191,9 @@ def topological_sort(nodes, edges):
                 leaves.append(dest)
 
     if edges:
-        return None, edges
+        raise TopologicalSortError(edges)
 
-    return result, None
+    return result
 
 
 @asyncio.coroutine

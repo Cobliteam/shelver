@@ -166,8 +166,9 @@ class Registry(AsyncBase, metaclass=ABCMeta):
             edges[base_image].append(image)
 
         # Will raise when a cycle is found
-        result, cycles = topological_sort(self._image_set, edges)
-        if cycles:
-            cycles_msg = ', '.join(map(' <- '.join, cycles.items()))
+        try:
+            topological_sort(self._image_set, edges)
+        except TopologicalSortError as e:
+            cycles_msg = ', '.join(' <- '.format(dest, srcs) for dest, srcs in e.cycles.items())
             raise ConfigurationError(
                 'Image dependency graph contains cycles: {}'.format(cycles_msg))
