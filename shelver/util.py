@@ -4,7 +4,12 @@ import asyncio
 from itertools import chain
 from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
 from signal import SIGHUP, SIGINT
+try:
+    from asyncio import ensure_future
+except ImportError:
+    from asyncio import async as ensure_future
 
+import yaml
 
 class FrozenDict(Mapping):  # pragma: nocover
     def __init__(self, *args, **kwargs):
@@ -56,7 +61,7 @@ class AsyncLoopSupervisor(object):
         raise KeyboardInterrupt
 
     def supervise(self, run_until):
-        run_fut = asyncio.ensure_future(run_until, loop=self.loop)
+        run_fut = ensure_future(run_until, loop=self.loop)
         self.loop.add_signal_handler(SIGHUP, self._interrupt)
         self.loop.add_signal_handler(SIGINT, self._interrupt)
 

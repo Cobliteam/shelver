@@ -1,7 +1,12 @@
 import asyncio
 import logging
 from functools import partial
+try:
+    from asyncio import ensure_future
+except ImportError:
+    from asyncio import async as ensure_future
 
+import yaml
 from shelver.errors import ConfigurationError, PackerError, ShelverError
 from shelver.util import AsyncBase
 
@@ -117,7 +122,7 @@ class Coordinator(AsyncBase):
                 raise asyncio.InvalidStateError(
                     'Coordinator is stopping, cannot accept new builds')
 
-            f = asyncio.ensure_future(self._run_build(image, version),
+            f = ensure_future(self._run_build(image, version),
                                       loop=self._loop)
             f.add_done_callback(self._on_build_finish)
             for fn in self._build_callbacks:

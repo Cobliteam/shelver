@@ -8,6 +8,10 @@ from collections import namedtuple
 from fnmatch import fnmatch
 from functools import wraps
 from asyncio.futures import CancelledError, TimeoutError
+try:
+    from asyncio import ensure_future
+except ImportError:
+    from asyncio import async as ensure_future
 
 import yaml
 import click
@@ -165,7 +169,7 @@ def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir, clean_t
             # The coordinator already handles cancellation. It will only throw
             # such an exception if waiting for a graceful finish timed out or
             # was interrupted by a second signal.
-            results = yield from asyncio.ensure_future(coordinator.run_all())
+            results = yield from ensure_future(coordinator.run_all())
         except (CancelledError, TimeoutError):
             logger.error('Failed to stop builds cleanly, aborting')
             return 130
