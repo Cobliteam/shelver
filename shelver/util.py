@@ -205,7 +205,7 @@ def topological_sort(nodes, edges):
 def async_subprocess_run(program, *args, input=None, stdout=subprocess.PIPE,
                          stderr=None, loop=None, **kwargs):
     loop = loop or asyncio.get_event_loop()
-    cmd = [program, *args]
+    cmd = [program] + list(args)
     proc = yield from asyncio.create_subprocess_exec(
         *cmd, stdout=stdout, stderr=stderr, loop=loop, **kwargs)
     out, err = yield from proc.communicate(input)
