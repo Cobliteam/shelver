@@ -105,6 +105,7 @@ class AmazonRegistry(Registry):
 
     @asyncio.coroutine
     def load_existing_artifacts(self, region=None):
+        logger.info('Loading existing AMIs from EC2')
         ec2 = self.provider.aws_res('ec2')
 
         def load_images():
@@ -115,6 +116,7 @@ class AmazonRegistry(Registry):
         images = yield from self.delay(load_images)
         for ami in images:
             image = self._get_image_for_ami(ami)
+            logger.debug('Registering AMI: %s', ami.id)
             self._register_ami(ami, image)
 
         return self
