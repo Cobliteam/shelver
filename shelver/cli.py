@@ -94,8 +94,8 @@ def shelver_async_cmd(f):
 @click.option(
     '--temp-dir', default=Builder.default_tmp_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
-    help='Directory to store temporary build files, such as in-progress archives, Packer templates '
-         'and processed instance metadata')
+    help='Directory to store temporary build files, such as in-progress archives, Packer '
+         'templates and processed instance metadata')
 @click.option(
     '--cache-dir', default=Builder.default_cache_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
@@ -219,7 +219,7 @@ def list_cmd(ctx):
 def get_artifact(ctx, image, version, fmt):
     """
     Retrieve artifact information.
-    
+
     Get information about an artifact matching a given IMAGE and VERSION. If VERSION is omitted,
     the current version as specified in the configuration file will be used.
 

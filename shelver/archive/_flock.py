@@ -1,7 +1,8 @@
 import fcntl
 import asyncio
 
-class FileLock():
+
+class FileLock:
     def __init__(self, file, loop=None, executor=None):
         self._file = file
         self._loop = loop or asyncio.get_event_loop()
@@ -17,4 +18,3 @@ class FileLock():
 
     def release(self):
         fcntl.flock(self._file.fileno(), fcntl.LOCK_UN)
-

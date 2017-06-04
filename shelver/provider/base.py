@@ -1,4 +1,3 @@
-import asyncio
 from abc import ABCMeta, abstractclassmethod
 
 from shelver.registry import Registry
@@ -10,7 +9,7 @@ from shelver.util import AsyncBase
 
 class Provider(AsyncBase, metaclass=ABCMeta):
     registry_class = Registry
-    builder_class= Builder
+    builder_class = Builder
     artifact_class = Artifact
 
     _providers = {}

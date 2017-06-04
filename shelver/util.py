@@ -1,4 +1,3 @@
-import sys
 import subprocess
 import asyncio
 from itertools import chain
@@ -9,7 +8,6 @@ try:
 except ImportError:
     from asyncio import async as ensure_future
 
-import yaml
 
 class FrozenDict(Mapping):  # pragma: nocover
     def __init__(self, *args, **kwargs):
@@ -43,7 +41,7 @@ class FrozenDict(Mapping):  # pragma: nocover
 
 class AsyncBase():
     def __init__(self, loop=None, executor=None, **kwargs):
-        self._loop = loop or  asyncio.get_event_loop()
+        self._loop = loop or asyncio.get_event_loop()
         self._executor = executor
 
     def delay(self, fn, *args):
