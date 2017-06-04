@@ -4,7 +4,8 @@ from collections import defaultdict
 
 from distutils.version import LooseVersion
 from shelver.image import Image
-from shelver.util import AsyncBase, TopologicalSortError, freeze, topological_sort
+from shelver.util import (AsyncBase, TopologicalSortError, freeze,
+                          topological_sort)
 from shelver.errors import (ConfigurationError, UnknownArtifactError,
                             UnknownImageError)
 
@@ -166,6 +167,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         try:
             topological_sort(self._image_set, edges)
         except TopologicalSortError as e:
-            cycles_msg = ', '.join(' <- '.format(dest, srcs) for dest, srcs in e.cycles.items())
+            cycles_msg = ', '.join(' <- '.format(dest, srcs)
+                                   for dest, srcs in e.cycles.items())
             raise ConfigurationError(
                 'Image dependency graph contains cycles: {}'.format(cycles_msg))

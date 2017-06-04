@@ -33,7 +33,8 @@ ShelverContext = namedtuple('ShelverContext', 'loop provider registry base_dir')
 @click.option('-d', '--base-dir',
               type=click.Path(exists=True, file_okay=False, resolve_path=True))
 @click.option('-c', '--config-file', default='./shelver.yml',
-              type=click.Path(exists=True, dir_okay=False, resolve_path=True, readable=True))
+              type=click.Path(exists=True, dir_okay=False, resolve_path=True,
+                              readable=True))
 @click.pass_context
 def main(ctx, provider_name, base_dir, config_file):
     logging.basicConfig(level=logging.INFO)
@@ -60,7 +61,8 @@ def main(ctx, provider_name, base_dir, config_file):
     provider = Provider.new(provider_name, provider_config, loop=loop)
     registry = provider.make_registry(Image.parse_config(config), loop=loop)
 
-    ctx.obj = ShelverContext(loop=loop, provider=provider, registry=registry, base_dir=base_dir)
+    ctx.obj = ShelverContext(loop=loop, provider=provider, registry=registry,
+                             base_dir=base_dir)
 
 
 def shelver_async_cmd(f):
@@ -70,7 +72,8 @@ def shelver_async_cmd(f):
     @wraps(f)
     def wrapper(ctx, *args, **kwargs):
         try:
-            ret = AsyncLoopSupervisor(ctx.obj.loop).supervise(f(ctx, *args, **kwargs))
+            ret = AsyncLoopSupervisor(
+                ctx.obj.loop).supervise(f(ctx, *args, **kwargs))
             if ret:
                 ctx.exit(ret)
         except ShelverError as e:
@@ -88,42 +91,43 @@ def shelver_async_cmd(f):
 @click.option(
     '-j', '--max-builds',
     type=click.IntRange(min=0),
-    help='Maximum number of builds to run concurrently. Omit or set to 0 to run as many builds '
-         'as allowed by the dependency tree (as base images need to be built before those that '
-         'depend on them)')
+    help='Maximum number of builds to run concurrently. Omit or set to 0 to '
+         'run as many builds as allowed by the dependency tree (as base images '
+         'need to be built before those that depend on them)')
 @click.option(
     '--temp-dir', default=Builder.default_tmp_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
-    help='Directory to store temporary build files, such as in-progress archives, Packer '
-         'templates and processed instance metadata')
+    help='Directory to store temporary build files, such as in-progress '
+         'archives, Packer templates and processed instance metadata')
 @click.option(
     '--cache-dir', default=Builder.default_cache_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
-    help='Directory to store finished archives and other data that is expensive to build and can '
-         'be shared between different invocations')
+    help='Directory to store finished archives and other data that is '
+         'expensive to build and can be shared between different invocations')
 @click.option(
     '--log-dir', default=Builder.default_log_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
     help='Directory to store build logs')
 @click.option(
     '--clean-temp-dir/--no-clean-temp-dir', default=True,
-    help='Whether to clean or leave files written to the temp dir after the build is finished. '
-         'Mostly useful for inspection and debugging.')
+    help='Whether to clean or leave files written to the temp dir after the '
+         'build is finished. Mostly useful for inspection and debugging.')
 @click.option(
     '--packer-cmd', default='packer',
     type=shlex.split,
-    help='Command to use to invoke Packer. Can include arguments other than the executable path, '
-         'separated by spaces and quotes according to shell rules (but NOT actually interpreted '
-         'by a shell, i.e. variable expansion is not possible)')
+    help='Command to use to invoke Packer. Can include arguments other than '
+         'the executable path, separated by spaces and quotes according to '
+         'shell rules (but NOT actually interpreted by a shell, i.e. variable '
+         'expansion is not possible)')
 @shelver_async_cmd
-def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir, clean_temp_dir,
-          packer_cmd):
+def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
+          clean_temp_dir, packer_cmd):
     """
     Build and tag images.
 
-    If IMAGES are specified, they will be treated as wildcard patterns filtering which images will
-    be built. Images which are not matched by the patterns, but are base images for others that do
-    will be included implicitly.
+    If IMAGES are specified, they will be treated as wildcard patterns filtering
+    which images will be built. Images which are not matched by the patterns,
+    but are base images for others that do will be included implicitly.
     """
 
     def build_done(image, version, fut):
@@ -143,18 +147,25 @@ def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir, clean_t
             logger.exception('%s:', image.name)
 
     loop, provider, registry, base_dir = ctx.find_object(ShelverContext)
-    builder = provider.make_builder(registry, base_dir=base_dir, tmp_dir=temp_dir,
-                                    cache_dir=cache_dir, log_dir=log_dir,
-                                    keep_tmp=not clean_temp_dir, packer_cmd=packer_cmd)
+    builder = provider.make_builder(
+        registry,
+        base_dir=base_dir,
+        tmp_dir=temp_dir,
+        cache_dir=cache_dir,
+        log_dir=log_dir,
+        keep_tmp=not clean_temp_dir,
+        packer_cmd=packer_cmd)
     with builder:
         yield from registry.load_existing_artifacts()
 
-        coordinator = builder.make_coordinator(max_builds=max_builds, cancel_timeout=60)
+        coordinator = builder.make_coordinator(max_builds=max_builds,
+                                               cancel_timeout=60)
         coordinator.add_build_done_callback(build_done)
 
         for name, image in registry.images.items():
             # Image was not specified in command line, do not build it
-            if image_patterns and not any(fnmatch(image.name, pat) for pat in image_patterns):
+            if image_patterns and not any(fnmatch(image.name, pat)
+                                          for pat in image_patterns):
                 continue
 
             # Image is already built, do not build it
@@ -220,16 +231,18 @@ def get_artifact(ctx, image, version, fmt):
     """
     Retrieve artifact information.
 
-    Get information about an artifact matching a given IMAGE and VERSION. If VERSION is omitted,
-    the current version as specified in the configuration file will be used.
+    Get information about an artifact matching a given IMAGE and VERSION. If
+    VERSION is omitted, the current version as specified in the configuration
+    file will be used.
 
     The output FORMAT can be one of:
         plain: user-readable description of artifact properties
         json:  machine-parsable description in JSON format
         id:    provider-specific ID only, in a single line
 
-    A non-zero exit code will be returned if the specified IMAGE is not configured, or if there
-    is no artifact matching the specified IMAGE and VERSION.
+    A non-zero exit code will be returned if the specified IMAGE is not
+    configured, or if there is no artifact matching the specified IMAGE and
+    VERSION.
     """
     loop, provider, registry, base_dir = ctx.find_object(ShelverContext)
     yield from registry.load_existing_artifacts()

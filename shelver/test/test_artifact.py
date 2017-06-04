@@ -48,4 +48,3 @@ def test_artifact_subclass_requirements(provider):
 
     with pytest.raises(TypeError):
         BrokenArtifact(provider=provider, name='test')
-

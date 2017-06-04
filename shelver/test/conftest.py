@@ -103,4 +103,3 @@ def registry(artifacts, empty_registry):
             registry.associate_artifact(artifact)
 
     return registry
-
