@@ -44,7 +44,7 @@ class Artifact(metaclass=ABCMeta):
     @property
     @abstractmethod
     def id(self):
-        pass
+        """Implementation-specific artifact ID string"""
 
     def to_dict(self):
         return {
@@ -56,6 +56,6 @@ class Artifact(metaclass=ABCMeta):
             'environment': self.environment
         }
 
-    def __str__(self):
+    def __str__(self):  # pragma: no cover
         props = ('{}={}'.format(k, v) for k, v in self.to_dict().items())
         return '{}({})'.format(type(self).__name__, ', '.join(props))

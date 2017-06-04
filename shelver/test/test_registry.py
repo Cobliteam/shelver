@@ -1,85 +1,7 @@
 import pytest
-import shelver.provider
 from shelver.image import Image
-from shelver.errors import UnknownImageError, ConfigurationError, UnknownArtifactError
-
-images = {
-    'fedora': Image.from_dict({
-        'name': 'fedora',
-        'current_version': '25',
-        'environment': 'prod',
-        'description': 'Fedora 25',
-        'template_path': 'fedora.yml',
-        'instance_type': 't2.micro'}),
-    'server': Image.from_dict({
-        'name': 'server',
-        'current_version': '2',
-        'environment': 'prod',
-        'description': 'Base server',
-        'template_path': 'server.yml',
-        'instance_type': 't2.micro',
-        'base': 'fedora'}),
-    'web': Image.from_dict({
-        'name': 'web',
-        'current_version': '1',
-        'environment': 'prod',
-        'description': 'Web server',
-        'template_path': 'web.yml',
-        'instance_type': 't2.micro',
-        'base': 'server:1'})
-}
-
-
-@pytest.fixture
-def provider():
-    return shelver.provider.TestProvider({})
-
-
-@pytest.fixture
-def empty_registry(provider):
-    return provider.make_registry(images)
-
-
-@pytest.fixture
-def artifacts(provider):
-    return {
-        'fedora-v24': provider.make_artifact(
-            id='fedora-v24',
-            image=images['fedora'],
-            version='24',
-            environment='prod'),
-        'fedora-v25': provider.make_artifact(
-            id='fedora-v25',
-            image=images['fedora'],
-            version='25',
-            environment='prod'),
-        'server-v1': provider.make_artifact(
-            id='server-v1',
-            image=images['server'],
-            version='1',
-            environment='prod'),
-        'server-v2': provider.make_artifact(
-            id='server-v2',
-            image=images['server'],
-            version='2',
-            environment='prod'),
-        'web-v1': provider.make_artifact(
-            id='web-v1',
-            image=images['web'],
-            version='1',
-            environment='prod')
-    }
-
-
-@pytest.fixture
-def registry(artifacts, empty_registry):
-    registry = empty_registry
-
-    for artifact in artifacts.values():
-        registry.register_artifact(artifact)
-        registry.associate_artifact(artifact)
-
-    return registry
+from shelver.errors import (UnknownImageError, ConfigurationError,
+                            UnknownArtifactError)
 
 
 def test_reject_unknown_base(provider):
@@ -121,11 +43,11 @@ def test_reject_cycles(provider):
         registry.check_cycles()
 
 
-def test_images(registry):
+def test_images(registry, images):
     assert registry.images == images
 
 
-def test_get_image(registry):
+def test_get_image(registry, images):
     for name, img in images.items():
         assert registry.get_image(name) == img
 
@@ -144,8 +66,11 @@ def test_get_image(registry):
 
 def test_artifact_registration(artifacts, registry):
     for name, artifact in artifacts.items():
-        full_name = artifact.image.name + ':' + artifact.version
-        assert registry.get_artifact(full_name) == artifact
+        expected_name = artifact.name
+        if artifact.image:
+            expected_name = artifact.image.name + ':' + artifact.version
+
+        assert registry.get_artifact(expected_name) == artifact
 
 
 def test_artifact_registration_alt_name(artifacts, empty_registry):
@@ -158,11 +83,12 @@ def test_artifact_registration_alt_name(artifacts, empty_registry):
 
 def test_artifact_association(artifacts, registry):
     for artifact in artifacts.values():
-        image = artifact.image
-        version = artifact.version
-        assert registry.get_image_artifact(image, version) == artifact
+        if artifact.image:
+            assert registry.get_image_artifact(artifact.image,
+                                               artifact.version) == artifact
 
-    assert registry.get_image_artifact('fedora', '24') == artifacts['fedora-v24']
+    assert \
+        registry.get_image_artifact('fedora', '24') == artifacts['fedora-v24']
     assert registry.get_image_artifact('fedora') == artifacts['fedora-v25']
     assert registry.get_image_artifact('server', '1') == artifacts['server-v1']
     assert registry.get_image_artifact('server') == artifacts['server-v2']
