@@ -15,14 +15,14 @@ def images():
         'fedora': Image.from_dict({
             'name': 'fedora',
             'current_version': '25',
-            'environment': 'prod',
+            'environment': 'test',
             'description': 'Fedora 25',
             'template_path': 'fedora.yml',
             'instance_type': 't2.micro'}),
         'server': Image.from_dict({
             'name': 'server',
             'current_version': '2',
-            'environment': 'prod',
+            'environment': 'test',
             'description': 'Base server',
             'template_path': 'server.yml',
             'instance_type': 't2.micro',
@@ -30,7 +30,7 @@ def images():
         'web': Image.from_dict({
             'name': 'web',
             'current_version': '1',
-            'environment': 'prod',
+            'environment': 'test',
             'description': 'Web server',
             'template_path': 'web.yml',
             'instance_type': 't2.micro',

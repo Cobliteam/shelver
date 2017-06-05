@@ -19,7 +19,8 @@ class Image(namedtuple('Image', 'name current_version environment description '
         'base': None,
         'metadata': [],
         'provision': None,
-        'builder_opts': {}
+        'builder_opts': {},
+        'instance_type': None
     }
 
     @classmethod
@@ -62,3 +63,6 @@ class Image(namedtuple('Image', 'name current_version environment description '
             return name, version
         except ValueError:
             return self.base, None
+
+    def to_dict(self):
+        return self._asdict()
