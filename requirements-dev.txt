@@ -2,6 +2,7 @@ pytest
 pytest-asyncio~=0.5.0; python_version < '3.6'
 pytest-asyncio; python_version >= '3.6'
 pytest-xdist
+pytest-sugar
 coverage
 flake8
 tox
