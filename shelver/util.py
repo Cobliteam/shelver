@@ -39,7 +39,7 @@ class FrozenDict(Mapping):  # pragma: nocover
             return self._data == other
 
 
-class AsyncBase():
+class AsyncBase:
     def __init__(self, loop=None, executor=None, **kwargs):
         self._loop = loop or asyncio.get_event_loop()
         self._executor = executor
@@ -48,41 +48,64 @@ class AsyncBase():
         return self._loop.run_in_executor(self._executor, fn, *args)
 
 
-class AsyncLoopSupervisor(object):
-    def __init__(self, loop, timeout=65):
-        self.loop = loop  # type: asyncio.AbstractEventLoop
-        self.timeout = timeout  # type: int
+class AsyncLoopSupervisor:
+    def __init__(self, loop, timeout=65, signals=(SIGHUP, SIGINT)):
+        self.loop = loop
+        self.timeout = timeout
+        self.timed_out = False
+        self._signals = list(signals)
         self._timeout_handle = None
+        self._stop_handle = None
 
-    @staticmethod
-    def _interrupt():
+    def _set_signals(self, fn, *args):
+        for sig in self._signals:
+            if fn is None:
+                self.loop.remove_signal_handler(sig)
+            else:
+                self.loop.add_signal_handler(sig, fn, *args)
+
+    def _interrupt(self):
+        self._set_signals(self._stop)
+
+        self._timeout_handle = self.loop.call_later(
+            self.timeout, self._stop, True)
+
+        raise KeyboardInterrupt
+
+    def _stop(self, timed_out=False):
+        if timed_out:
+            self.timed_out = True
+
+        self._set_signals(None)
+
+        if self._timeout_handle:
+            self._timeout_handle.cancel()
+
+        self._stop_handle = self.loop.call_later(1, self.loop.stop)
+
         raise KeyboardInterrupt
 
     def supervise(self, run_until):
         run_fut = ensure_future(run_until, loop=self.loop)
-        self.loop.add_signal_handler(SIGHUP, self._interrupt)
-        self.loop.add_signal_handler(SIGINT, self._interrupt)
+        self._set_signals(self._interrupt)
 
         try:
             while True:
                 try:
                     return self.loop.run_until_complete(run_fut)
                 except KeyboardInterrupt:
-                    if not self._timeout_handle:
-                        self._timeout_handle = self.loop.call_later(
-                            self.timeout, self.loop.stop)
-
                     run_fut.cancel()
         finally:
-            self.loop.remove_signal_handler(SIGHUP)
-            self.loop.remove_signal_handler(SIGINT)
+            self._set_signals(None)
 
             if hasattr(self.loop, 'shutdown_asyncgens'):
                 self.loop.run_until_complete(self.loop.shutdown_asyncgens())
 
             if self._timeout_handle:
                 self._timeout_handle.cancel()
-                self._timeout_handle = None
+
+            if self._stop_handle:
+                self._stop_handle.cancel()
 
             self.loop.stop()
 

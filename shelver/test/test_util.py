@@ -1,6 +1,6 @@
-import pytest
 from collections import OrderedDict, Mapping
 
+import pytest
 from shelver.util import (FrozenDict, TopologicalSortError, is_collection,
                           wrap_as_coll, deep_merge, freeze, topological_sort)
 
