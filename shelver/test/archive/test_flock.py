@@ -65,7 +65,7 @@ def _run_competing_file_writes(make_lock):
 
 
 @pytest.mark.asyncio
-def test_filelock_exclusive(named_temp_file):
+def test_filelock_exclusive():
     for i in range(10):
         result = yield from _run_competing_file_writes(FileLock)
 
@@ -75,7 +75,7 @@ def test_filelock_exclusive(named_temp_file):
 
 
 @pytest.mark.asyncio
-def test_filelock_canary(named_temp_file):
+def test_filelock_canary():
     """Run tests with a do-nothing lock to validate the test above"""
 
     results = set()
@@ -86,4 +86,3 @@ def test_filelock_canary(named_temp_file):
     # Consider a failure if there are any non-deterministic results. This way
     # we can confirm that we have races without the working file lock.
     assert len(results) != 1
-

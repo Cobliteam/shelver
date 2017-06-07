@@ -1,6 +1,3 @@
-import os
-from tempfile import mkstemp
-
 import pytest
 from shelver.image import Image
 from shelver.provider.test import TestProvider
@@ -105,10 +102,3 @@ def registry(artifacts, empty_registry):
             registry.associate_artifact(artifact)
 
     return registry
-
-
-@pytest.fixture
-def named_temp_file():
-    fd, fname = mkstemp()
-    with open(fd, 'w+b') as f:
-        yield f, fname

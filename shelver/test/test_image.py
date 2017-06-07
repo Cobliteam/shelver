@@ -21,7 +21,8 @@ def test_image_from_dict_defaults():
 
 def test_image_from_dict_overrides():
     img = Image.from_dict(
-        {'name': 'test', 'current_version': '1', 'description': 'override desc'},
+        {'name': 'test', 'current_version': '1',
+         'description': 'override desc'},
         defaults={'builder_opts': {'some-option': 'some-value'},
                   'description': 'default desc',
                   'base': 'some-base'})
