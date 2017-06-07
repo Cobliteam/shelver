@@ -3,6 +3,10 @@ import asyncio
 import threading
 import time
 import signal
+try:
+    from asyncio import ensure_future
+except ImportError:
+    from asyncio import async as ensure_future
 
 import pytest
 from shelver.util import AsyncBase, AsyncLoopSupervisor
@@ -32,7 +36,7 @@ def test_async_base_delay(event_loop):
         time.sleep(0.1)
         return event_loop.time()
 
-    f = asyncio.ensure_future(async_obj.delay(get_time))
+    f = ensure_future(async_obj.delay(get_time))
     t1 = event_loop.time()
     t2 = yield from f
 
