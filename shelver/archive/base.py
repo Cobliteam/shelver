@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 
 from shelver.errors import ConfigurationError
 from shelver.util import AsyncBase
-from ._flock import FileLock
+from .file_lock import FileLock
 
 logger = logging.getLogger('shelver.archive.base')
 
