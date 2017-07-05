@@ -237,7 +237,7 @@ class Builder(AsyncBase):
 
                 proc = yield from asyncio.create_subprocess_exec(
                     program, *args, stdin=None, stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE, loop=self._loop)
+                    stderr=subprocess.PIPE, limit=2 ** 32, loop=self._loop)
 
                 watcher = Watcher(image.name, msg_stream, log_stream,
                                   loop=self._loop)
