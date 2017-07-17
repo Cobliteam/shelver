@@ -79,9 +79,18 @@ class AmazonRegistry(Registry):
         if not name_tag:
             return None
 
-        return self.get_image(name_tag)
+        image = self.get_image(name_tag, default=None)
+        if not image:
+            logger.warn('Ignoring artifact association for missing image `%s`',
+                        name_tag)
+            return None
+
+        return image
 
     def _register_ami(self, ami, image=None):
+        if not image:
+            image = self._get_image_for_ami(ami)
+
         artifact = AmazonArtifact(ami, image=image, provider=self.provider)
         self.register_artifact(artifact)
         if image:
@@ -115,9 +124,8 @@ class AmazonRegistry(Registry):
 
         images = yield from self.delay(load_images)
         for ami in images:
-            image = self._get_image_for_ami(ami)
             logger.debug('Registering AMI: %s', ami.id)
-            self._register_ami(ami, image)
+            self._register_ami(ami)
 
         return self
 
