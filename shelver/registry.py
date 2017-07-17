@@ -70,6 +70,7 @@ class Registry(AsyncBase, metaclass=ABCMeta):
                     'Artifact already registered with name {}'.format(name))
         else:
             self._artifacts[name] = artifact
+            self._artifacts[artifact.id] = artifact
 
         return self
 

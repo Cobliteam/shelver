@@ -71,6 +71,7 @@ def test_artifact_registration(artifacts, registry):
             expected_name = artifact.image.name + ':' + artifact.version
 
         assert registry.get_artifact(expected_name) == artifact
+        assert registry.get_artifact(artifact.id) == artifact
 
 
 def test_artifact_registration_alt_name(artifacts, empty_registry):
@@ -79,6 +80,7 @@ def test_artifact_registration_alt_name(artifacts, empty_registry):
     artifact = next(iter(artifacts.values()))
     registry.register_artifact(artifact, name='whatever')
     assert registry.get_artifact('whatever') == artifact
+    assert registry.get_artifact(artifact.id) == artifact
 
 
 def test_artifact_association(artifacts, registry):
