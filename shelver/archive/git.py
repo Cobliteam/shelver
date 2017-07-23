@@ -19,7 +19,7 @@ class GitArchive(Archive):
         self.revision = revision or 'HEAD'
         self._git_lock = asyncio.Lock()
         self._basename = None
-        self._revision_hash = None
+        self._revision_id = None
 
     @asyncio.coroutine
     def _run_git(self, *args, capture=False, **kwargs):
@@ -36,27 +36,28 @@ class GitArchive(Archive):
             self._git_lock.release()
 
     @asyncio.coroutine
-    def revision_hash(self):
-        if not self._revision_hash:
+    def revision_id(self):
+        if not self._revision_id:
+            rev = self.revision + '^{commit}'
             out, _ = yield from \
-                self._run_git('rev-parse', self.revision, cwd=self.source_dir,
-                              capture=True)
-            self._revision_hash = out.rstrip().decode('utf-8')
+                self._run_git('rev-parse', '--verify', rev,
+                              cwd=self.source_dir, capture=True)
+            self._revision_id = out.rstrip().decode('utf-8')
 
-        return self._revision_hash
+        return self._revision_id
 
     @asyncio.coroutine
     def basename(self):
         if not self._basename:
             repo_name = os.path.basename(os.path.abspath(self.source_dir))
-            rev = yield from self.revision_hash()
+            rev = yield from self.revision_id()
             self._basename = '{}-{}.tar.xz'.format(repo_name, rev)
 
         return self._basename
 
     @asyncio.coroutine
     def build(self):
-        rev = yield from self.revision_hash()
+        rev = yield from self.revision_id()
         basename = yield from self.basename()
 
         work_tree = os.path.join(self.tmp_dir, 'worktree')
@@ -89,5 +90,5 @@ class GitArchive(Archive):
     def to_dict(self):
         d = super().to_dict()
         d['revision'] = self.revision
-        d['commit'] = self._revision_hash
+        d['commit'] = self._revision_id
         return d
