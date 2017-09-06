@@ -7,6 +7,9 @@ import asyncio
 from collections import Mapping
 from functools import partial, lru_cache
 
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
 from boto3.session import Session
 from botocore.client import ClientError
 from shelver.registry import Registry
@@ -210,6 +213,34 @@ class AmazonBuilder(Builder):
 
         return self._instance_profile
 
+    def _guess_userdata_type(self, data):
+        mime_types = {
+            '#!':              'text/x-shellscript',
+            '#cloud-config':   'text/cloud-config',
+            '#upstart-job':    'text/upstart-job',
+            '#cloud-boothook': 'text/cloud-boothook',
+            '#part-handler':   'text/part-handler',
+            '#include':        'text/x-include-url'
+        }
+
+        for prefix, mime_type in mime_types.items():
+            if data.startswith(prefix):
+                return mime_type
+
+        return None
+
+    def _encode_userdata_multipart(self, parts):
+        message = MIMEMultipart()
+        for part in parts:
+            mime_type = self._guess_userdata_type(part)
+            if not mime_type:
+                raise ValueError('Failed to guess MIME type for userdata part')
+
+            message_part = MIMEText(part, mime_type)
+            message.attach(message_part)
+
+        return bytes(message)
+
     @asyncio.coroutine
     def get_user_data_file(self, image):
         if not image.metadata:
@@ -219,7 +250,11 @@ class AmazonBuilder(Builder):
         fd, path = yield from self.delay(
             partial(tempfile.mkstemp, suffix='.gz', dir=tmp))
 
-        data = '\n'.join(image.metadata).encode('utf-8')
+        if len(image.metadata) == 1:
+            data = image.metadata.encode('utf-8')
+        else:
+            data = self._encode_userdata_multipart(image.metadata)
+
         with os.fdopen(fd, 'wb') as f:
             with gzip.GzipFile(fileobj=f, mode='wb') as gzf:
                 yield from self.delay(gzf.write, data)
