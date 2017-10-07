@@ -1,10 +1,10 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 VERSION = '0.1'
 
 setup(
     name='shelver',
-    packages=['shelver'],
+    packages=find_packages(),
     version=VERSION,
     description="Continuous deployment assistant to Hashicorp's Packer",
     long_description=open('README.rst').read(),
