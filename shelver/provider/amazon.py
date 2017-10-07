@@ -251,7 +251,7 @@ class AmazonBuilder(Builder):
             partial(tempfile.mkstemp, suffix='.gz', dir=tmp))
 
         if len(image.metadata) == 1:
-            data = image.metadata.encode('utf-8')
+            data = image.metadata[0].encode('utf-8')
         else:
             data = self._encode_userdata_multipart(image.metadata)
 
