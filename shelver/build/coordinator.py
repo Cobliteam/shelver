@@ -1,10 +1,9 @@
 import asyncio
 import logging
 from functools import partial
-try:
-    from asyncio import ensure_future
-except ImportError:
-    from asyncio import async as ensure_future
+ensure_future = getattr(asyncio, "ensure_future", None)
+if not ensure_future:
+    ensure_future = getattr(asyncio, "async")
 
 import yaml
 from shelver.errors import ConfigurationError, PackerError, ShelverError

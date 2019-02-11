@@ -8,10 +8,6 @@ from collections import namedtuple
 from fnmatch import fnmatch
 from functools import wraps
 from asyncio.futures import CancelledError, TimeoutError
-try:
-    from asyncio import ensure_future
-except ImportError:
-    from asyncio import async as ensure_future
 
 import yaml
 import click
@@ -20,6 +16,10 @@ from shelver.build import Builder
 from shelver.image import Image
 from shelver.errors import ShelverError
 from shelver.util import AsyncLoopSupervisor
+
+ensure_future = getattr(asyncio, "ensure_future", None)
+if not ensure_future:
+    ensure_future = getattr(asyncio, "async")
 
 
 logger = logging.getLogger('shelver.cli')

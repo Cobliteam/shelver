@@ -3,10 +3,10 @@ import asyncio
 from itertools import chain
 from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
 from signal import SIGHUP, SIGINT
-try:
-    from asyncio import ensure_future
-except ImportError:
-    from asyncio import async as ensure_future
+
+ensure_future = getattr(asyncio, "ensure_future", None)
+if not ensure_future:
+    ensure_future = getattr(asyncio, "async")
 
 
 class FrozenDict(Mapping):  # pragma: nocover
