@@ -6,7 +6,7 @@ import signal
 try:
     from asyncio import ensure_future
 except ImportError:
-    from asyncio import async as ensure_future
+    ensure_future = getattr(asyncio, 'async')
 
 import pytest
 from shelver.util import AsyncBase, AsyncLoopSupervisor
