@@ -1,7 +1,7 @@
+import asyncio
 import os
 import shutil
 import subprocess
-import asyncio
 
 from shelver.util import async_subprocess_run
 from .base import Archive
@@ -21,12 +21,11 @@ class GitArchive(Archive):
         self._basename = None
         self._revision_id = None
 
-    @asyncio.coroutine
-    def _run_git(self, *args, capture=False, **kwargs):
+    async def _run_git(self, *args, capture=False, **kwargs):
         stdout = subprocess.PIPE if capture else None
-        yield from self._git_lock.acquire()
+        await self._git_lock.acquire()
         try:
-            out, err = yield from async_subprocess_run(
+            out, err = await async_subprocess_run(
                 self.git_cmd, *args, stdout=stdout, loop=self._loop, **kwargs)
             if not capture:
                 return None, None
@@ -35,53 +34,49 @@ class GitArchive(Archive):
         finally:
             self._git_lock.release()
 
-    @asyncio.coroutine
-    def revision_id(self):
+    async def revision_id(self):
         if not self._revision_id:
             rev = self.revision + '^{commit}'
-            out, _ = yield from \
+            out, _ = await \
                 self._run_git('rev-parse', '--verify', rev,
                               cwd=self.source_dir, capture=True)
             self._revision_id = out.rstrip().decode('utf-8')
 
         return self._revision_id
 
-    @asyncio.coroutine
-    def basename(self):
+    async def basename(self):
         if not self._basename:
             repo_name = os.path.basename(os.path.abspath(self.source_dir))
-            rev = yield from self.revision_id()
+            rev = await self.revision_id()
             self._basename = '{}-{}.tar.xz'.format(repo_name, rev)
 
         return self._basename
 
-    @asyncio.coroutine
-    def build(self):
-        rev = yield from self.revision_id()
-        basename = yield from self.basename()
+    async def build(self):
+        rev = await self.revision_id()
+        basename = await self.basename()
 
         work_tree = os.path.join(self.tmp_dir, 'worktree')
         archive = os.path.join(self.tmp_dir, basename)
 
         try:
-            yield from self._run_git(
+            await self._run_git(
                 'worktree', 'add', '--detach', work_tree, cwd=self.source_dir)
-            yield from self._run_git(
+            await self._run_git(
                 'checkout', '--detach', rev, cwd=work_tree)
-            yield from self._run_git(
+            await self._run_git(
                 'submodule', 'update', '--init', '--recursive', '--checkout',
                 '--force', cwd=work_tree)
-            yield from async_subprocess_run(
+            await async_subprocess_run(
                 'tar', '-c', '--exclude=.git', '--exclude=.git/*', '-f',
                 archive, '.', cwd=work_tree)
         finally:
             try:
                 clean = self._loop.run_in_executor(
                     self._executor, shutil.rmtree, work_tree)
-                yield from clean
+                await clean
 
-                yield from self._run_git('worktree', 'prune',
-                                         cwd=self.source_dir)
+                await self._run_git('worktree', 'prune', cwd=self.source_dir)
             except Exception:
                 pass
 

@@ -3,7 +3,6 @@ import logging
 import json
 import tempfile
 import gzip
-import asyncio
 from collections import Mapping
 from functools import partial, lru_cache
 
@@ -101,8 +100,7 @@ class AmazonRegistry(Registry):
 
         return artifact
 
-    @asyncio.coroutine
-    def load_artifact_by_id(self, id, region=None, image=None):
+    async def load_artifact_by_id(self, id, region=None, image=None):
         ec2 = self.provider.aws_res('ec2')
 
         if region and region != self.provider.region:
@@ -112,11 +110,10 @@ class AmazonRegistry(Registry):
             return
 
         ami = ec2.Image(id)
-        yield from self.delay(ami.load)
+        await self.delay(ami.load)
         return self._register_ami(ami, image)
 
-    @asyncio.coroutine
-    def load_existing_artifacts(self, region=None):
+    async def load_existing_artifacts(self, region=None):
         logger.info('Loading existing AMIs from EC2')
         ec2 = self.provider.aws_res('ec2')
 
@@ -125,7 +122,7 @@ class AmazonRegistry(Registry):
                                        Filters=self.ami_filters)
             return list(images)
 
-        images = yield from self.delay(load_images)
+        images = await self.delay(load_images)
         for ami in images:
             logger.debug('Registering AMI: %s', ami.id)
             self._register_ami(ami)
@@ -205,10 +202,9 @@ class AmazonBuilder(Builder):
 
         return profile['InstanceProfile']['InstanceProfileName']
 
-    @asyncio.coroutine
-    def get_instance_profile(self):
+    async def get_instance_profile(self):
         if not self._instance_profile:
-            prof = yield from self.delay(self._create_instance_profile)
+            prof = await self.delay(self._create_instance_profile)
             self._instance_profile = prof
 
         return self._instance_profile
@@ -241,13 +237,12 @@ class AmazonBuilder(Builder):
 
         return bytes(message)
 
-    @asyncio.coroutine
-    def get_user_data_file(self, image):
+    async def get_user_data_file(self, image):
         if not image.metadata:
             return ''
 
-        tmp = yield from self.get_build_tmp_dir()
-        fd, path = yield from self.delay(
+        tmp = await self.get_build_tmp_dir()
+        fd, path = await self.delay(
             partial(tempfile.mkstemp, suffix='.gz', dir=tmp))
 
         if len(image.metadata) == 1:
@@ -257,17 +252,16 @@ class AmazonBuilder(Builder):
 
         with os.fdopen(fd, 'wb') as f:
             with gzip.GzipFile(fileobj=f, mode='wb') as gzf:
-                yield from self.delay(gzf.write, data)
+                await self.delay(gzf.write, data)
 
         return path
 
-    @asyncio.coroutine
-    def get_template_context(self, image, version, archive, **kwargs):
-        context = yield from super().get_template_context(
+    async def get_template_context(self, image, version, archive, **kwargs):
+        context = await super().get_template_context(
             image, version, archive, **kwargs)
 
-        data_file = yield from self.get_user_data_file(image)
-        prof = yield from self.get_instance_profile()
+        data_file = await self.get_user_data_file(image)
+        prof = await self.get_instance_profile()
 
         context.update({
             'aws_user_data_file': data_file,

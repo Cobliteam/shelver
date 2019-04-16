@@ -4,10 +4,11 @@ import json
 import logging
 import shlex
 import asyncio
+from asyncio import ensure_future
+from asyncio.futures import CancelledError, TimeoutError
 from collections import namedtuple
 from fnmatch import fnmatch
 from functools import wraps
-from asyncio.futures import CancelledError, TimeoutError
 
 import yaml
 import click
@@ -16,10 +17,6 @@ from shelver.build import Builder
 from shelver.image import Image
 from shelver.errors import ShelverError
 from shelver.util import AsyncLoopSupervisor
-
-ensure_future = getattr(asyncio, "ensure_future", None)
-if not ensure_future:
-    ensure_future = getattr(asyncio, "async")
 
 
 logger = logging.getLogger('shelver.cli')
@@ -120,8 +117,8 @@ def shelver_async_cmd(f):
          'shell rules (but NOT actually interpreted by a shell, i.e. variable '
          'expansion is not possible)')
 @shelver_async_cmd
-def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
-          clean_temp_dir, packer_cmd):
+async def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
+                clean_temp_dir, packer_cmd):
     """
     Build and tag images.
 
@@ -155,8 +152,9 @@ def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
         log_dir=log_dir,
         keep_tmp=not clean_temp_dir,
         packer_cmd=packer_cmd)
+
     with builder:
-        yield from registry.load_existing_artifacts()
+        await registry.load_existing_artifacts()
 
         coordinator = builder.make_coordinator(max_builds=max_builds,
                                                cancel_timeout=60)
@@ -180,7 +178,7 @@ def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
             # The coordinator already handles cancellation. It will only throw
             # such an exception if waiting for a graceful finish timed out or
             # was interrupted by a second signal.
-            results = yield from ensure_future(coordinator.run_all())
+            results = await ensure_future(coordinator.run_all())
         except (CancelledError, TimeoutError):
             logger.error('Failed to stop builds cleanly, aborting')
             return 130
@@ -194,12 +192,12 @@ def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
 
 @main.command('list')
 @shelver_async_cmd
-def list_cmd(ctx):
+async def list_cmd(ctx):
     """
     List configured images.
     """
     loop, provider, registry, base_dir = ctx.find_object(ShelverContext)
-    yield from registry.load_existing_artifacts()
+    await registry.load_existing_artifacts()
 
     images = sorted(registry.images.items())
     artifacts = set(registry.artifacts.values())
@@ -227,7 +225,7 @@ def list_cmd(ctx):
     type=click.Choice(['plain', 'json', 'id']),
     help='Output format')
 @shelver_async_cmd
-def get_artifact(ctx, image, version, fmt):
+async def get_artifact(ctx, image, version, fmt):
     """
     Retrieve artifact information.
 
@@ -245,7 +243,7 @@ def get_artifact(ctx, image, version, fmt):
     VERSION.
     """
     loop, provider, registry, base_dir = ctx.find_object(ShelverContext)
-    yield from registry.load_existing_artifacts()
+    await registry.load_existing_artifacts()
 
     artifact = registry.get_image_artifact(image, version=version, default=None)
     if not artifact:

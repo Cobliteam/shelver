@@ -9,16 +9,14 @@ from shelver.archive.file_lock import FileLock
 
 class FakeFileLock(FileLock):
     """A FileLock that does nothing, for canary testing"""
-    @asyncio.coroutine
-    def acquire(self, *args, **kwargs):
+    async def acquire(self, *args, **kwargs):
         return self._file
 
     def release(self):
         pass
 
 
-@asyncio.coroutine
-def _run_competing_file_writes(make_lock):
+async def _run_competing_file_writes(make_lock):
     """
     Write to the same file in two coroutines and return the final contents
 
@@ -35,8 +33,9 @@ def _run_competing_file_writes(make_lock):
             # random fashion, jumping between positions, so that we can observe
             # any races. If the lock is functioning correctly, the file will end
             # up as if one of the two pieces of data was written sequentially.
-            def write(lock, data):
-                f = yield from lock.acquire()
+
+            async def write(lock, data):
+                f = await lock.acquire()
 
                 f.truncate(len(data))
                 positions = list(range(len(data)))
@@ -47,11 +46,11 @@ def _run_competing_file_writes(make_lock):
                     # and step over us if the lock is broken.
                     f.seek(i)
                     f.write(data[i:i + 1])
-                    yield
+                    await asyncio.sleep(0)
 
                 lock.release()
 
-            yield from asyncio.gather(
+            await asyncio.gather(
                 write(make_lock(f1), b'hello'),
                 write(make_lock(f2), b'world'))
 
@@ -65,9 +64,9 @@ def _run_competing_file_writes(make_lock):
 
 
 @pytest.mark.asyncio
-def test_filelock_exclusive():
+async def test_filelock_exclusive():
     for i in range(10):
-        result = yield from _run_competing_file_writes(FileLock)
+        result = await _run_competing_file_writes(FileLock)
 
         # We must get correct results every single time to be sure the lock
         # works
@@ -75,12 +74,12 @@ def test_filelock_exclusive():
 
 
 @pytest.mark.asyncio
-def test_filelock_canary():
+async def test_filelock_canary():
     """Run tests with a do-nothing lock to validate the test above"""
 
     results = set()
     for i in range(10):
-        result = yield from _run_competing_file_writes(FakeFileLock)
+        result = await _run_competing_file_writes(FakeFileLock)
         results.add(result)
 
     # Consider a failure if there are any non-deterministic results. This way

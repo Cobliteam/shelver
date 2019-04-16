@@ -7,7 +7,7 @@ import logging
 import subprocess
 import asyncio
 from functools import partial
-from collections import Mapping
+from collections.abc import Mapping
 from ast import literal_eval
 
 import yaml
@@ -16,7 +16,7 @@ from jinja2 import Template
 
 from shelver.archive import Archive
 from shelver.util import AsyncBase, deep_merge, is_collection
-from shelver.errors import ConfigurationError, ConcurrentBuildError
+from shelver.errors import ConfigurationError
 from .coordinator import Coordinator
 from .watcher import Watcher
 
@@ -90,29 +90,26 @@ class Builder(AsyncBase):
 
         return tempfile.mkdtemp(dir=base)
 
-    @asyncio.coroutine
-    def get_build_tmp_dir(self):
+    async def get_build_tmp_dir(self):
         if self._build_tmp_dir:
             return self._build_tmp_dir
 
-        self._build_tmp_dir = yield from self.delay(
+        self._build_tmp_dir = await self.delay(
             self._create_tmp_dir, self.tmp_dir)
         return self._build_tmp_dir
 
-    @asyncio.coroutine
-    def build_archive(self, opts):
-        tmp = yield from self.get_build_tmp_dir()
+    async def build_archive(self, opts):
+        tmp = await self.get_build_tmp_dir()
         archive = Archive.from_config(
             self.base_dir, opts, tmp_dir=tmp, cache_dir=self.cache_dir)
-        yield from archive.get_or_build()
+        await archive.get_or_build()
         return archive
 
-    @asyncio.coroutine
-    def get_template_context(self, image, version, archive, base_artifact=None):
+    async def get_template_context(self, image, version, archive, base_artifact=None):
         if base_artifact:
             logger.info('Using base artifact: %s', base_artifact)
 
-        archive_path = yield from archive.get_or_build()
+        archive_path = await archive.get_or_build()
 
         # Prepare packer template
         context = {
@@ -143,14 +140,13 @@ class Builder(AsyncBase):
 
             return result_obj
 
-    @asyncio.coroutine
-    def load_template(self, path, context):
-        f = yield from aiofiles.open(path, 'rb', loop=self._loop)
+    async def load_template(self, path, context):
+        f = await aiofiles.open(path, 'rb', loop=self._loop)
         try:
-            content = yield from f.read()
+            content = await f.read()
             return self.process_template(yaml.safe_load(content), context)
         finally:
-            yield from f.close()
+            await f.close()
 
     def post_process_template(self, data, image):
         try:
@@ -168,13 +164,12 @@ class Builder(AsyncBase):
         f.path = path
         return f
 
-    @asyncio.coroutine
-    def write_template(self, data):
-        tmp = yield from self.get_build_tmp_dir()
+    async def write_template(self, data):
+        tmp = await self.get_build_tmp_dir()
 
-        fd, path = yield from self.delay(
+        fd, path = await self.delay(
             partial(tempfile.mkstemp, suffix='.json', dir=tmp))
-        f = yield from aiofiles.open(fd, 'w', encoding='utf-8',
+        f = await aiofiles.open(fd, 'w', encoding='utf-8',
                                      loop=self._loop, executor=self._executor)
         try:
             def default(o):
@@ -186,64 +181,61 @@ class Builder(AsyncBase):
             content = json.dumps(data, default=default, indent=2)
             logger.debug('Generated packer template: \n%s', content)
 
-            yield from f.write(content)
+            await f.write(content)
             return path
         finally:
-            yield from f.close()
+            await f.close()
 
-    @asyncio.coroutine
-    def _open_log_file(self, name, version):
+    async def _open_log_file(self, name, version):
         if not os.path.isdir(self.log_dir):
-            yield from self.delay(os.makedirs, self.log_dir)
+            await self.delay(os.makedirs, self.log_dir)
 
         fname = '{}_{}.log'.format(name, version)
         path = os.path.join(self.log_dir, fname)
-        f = yield from aiofiles.open(path, mode='ab', loop=self._loop)
+        f = await aiofiles.open(path, mode='ab', loop=self._loop)
         return f
 
-    @asyncio.coroutine
-    def _get_build_cmd(self, image, version, base_artifact=None, logger=logger):
+    async def _get_build_cmd(self, image, version, base_artifact=None, logger=logger):
         logger.info('Starting build: %s, version %s', image, version)
 
         archive = \
-            yield from self.build_archive(image.archive)
+            await self.build_archive(image.archive)
         context = \
-            yield from self.get_template_context(
+            await self.get_template_context(
                 image, version, archive, base_artifact=base_artifact)
         packer_data = \
-            yield from self.load_template(image.template_path, context)
+            await self.load_template(image.template_path, context)
         packer_data = \
             self.post_process_template(packer_data, image)
         template_path = \
-            yield from self.write_template(packer_data)
+            await self.write_template(packer_data)
 
         cmd = list(self.packer_cmd) + ['build', '-machine-readable', template_path]
         return cmd[0], cmd[1:]
 
-    @asyncio.coroutine
-    def run_build(self, image, version, base_artifact=None, msg_stream=None):
+    async def run_build(self, image, version, base_artifact=None, msg_stream=None):
         close_stream = False
         if not msg_stream:
-            msg_stream = yield from aiofiles.open(
+            msg_stream = await aiofiles.open(
                 sys.stderr.fileno(), 'wb', closefd=False, loop=self._loop,
                 executor=self._executor)
             close_stream = True
 
         try:
-            log_stream = yield from self._open_log_file(image.name, version)
+            log_stream = await self._open_log_file(image.name, version)
             try:
-                program, args = yield from self._get_build_cmd(
+                program, args = await self._get_build_cmd(
                     image, version, base_artifact=base_artifact)
 
-                proc = yield from asyncio.create_subprocess_exec(
+                proc = await asyncio.create_subprocess_exec(
                     program, *args, stdin=None, stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE, limit=2 ** 32, loop=self._loop)
 
                 watcher = Watcher(image.name, msg_stream, log_stream,
                                   loop=self._loop)
-                return (yield from watcher.run(proc))
+                return (await watcher.run(proc))
             finally:
-                yield from log_stream.close()
+                await log_stream.close()
         finally:
             if close_stream:
-                yield from msg_stream.close()
+                await msg_stream.close()

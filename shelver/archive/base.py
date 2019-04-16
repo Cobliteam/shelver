@@ -56,12 +56,11 @@ class Archive(AsyncBase, metaclass=ABCMeta):
     def build(self):
         pass
 
-    @asyncio.coroutine
-    def get_or_build(self):
+    async def get_or_build(self):
         if self._path:
             return self._path
 
-        basename = yield from self.basename()
+        basename = await self.basename()
         path = os.path.join(self.cache_dir, basename)
 
         try:
@@ -70,12 +69,12 @@ class Archive(AsyncBase, metaclass=ABCMeta):
             # swap the tmp file with the final one.
             with open(path, 'x') as f:
                 lock = FileLock(f, loop=self._loop, executor=self._executor)
-                yield from lock.acquire()
+                await lock.acquire()
                 try:
-                    tmp_archive = yield from self.build()
+                    tmp_archive = await self.build()
                     mv = self._loop.run_in_executor(
                         self._executor, shutil.move, tmp_archive, path)
-                    yield from mv
+                    await mv
 
                     logger.info('Generated provision archive: %s', path)
                 finally:
@@ -87,7 +86,7 @@ class Archive(AsyncBase, metaclass=ABCMeta):
                 # Acquire the read lock and release it immediately, just to wait
                 # until a running build finishes
                 lock = FileLock(f, loop=self._loop, executor=self._executor)
-                yield from lock.acquire(exclusive=False)
+                await lock.acquire(exclusive=False)
                 lock.release()
         except Exception:
             logger.exception('Failed to build archive')

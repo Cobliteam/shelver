@@ -46,29 +46,27 @@ class Watcher(object):
         data = data.replace(b'%!(PACKER_COMMA)', b',')
         return target, type_, data
 
-    @asyncio.coroutine
-    def write_message(self, line):
-        isatty = yield from self._msg_stream.isatty()
+    async def write_message(self, line):
+        isatty = await self._msg_stream.isatty()
         if isatty:
             prefix = self.colored(self.prefix + b':')
         else:
             prefix = self.prefix + b':'
 
-        yield from self._msg_stream.write(prefix + b' ' + line + b'\n')
-        yield from self._msg_stream.flush()
-        yield from self._log_stream.write(line + b'\n')
-        yield from self._log_stream.flush()
+        await self._msg_stream.write(prefix + b' ' + line + b'\n')
+        await self._msg_stream.flush()
+        await self._log_stream.write(line + b'\n')
+        await self._log_stream.flush()
 
-    @asyncio.coroutine
-    def handle_stdout(self, stream):
+    async def handle_stdout(self, stream):
         while True:
-            line = yield from stream.readline()
+            line = await stream.readline()
             if not line:
                 break
 
             target, type_, data = self._parse_line(line)
             if data is None:
-                yield from self.write_message(line)
+                await self.write_message(line)
                 continue
 
             # We only keep the data as bytes if it is possibly coming from
@@ -78,7 +76,7 @@ class Watcher(object):
                 if target:
                     msg = target + b': ' + msg
 
-                yield from self.write_message(msg)
+                await self.write_message(msg)
                 continue
 
             # Otherwise, we transform everything to unicode and work from there.
@@ -105,14 +103,13 @@ class Watcher(object):
                 else:
                     artifact[data_key] = data_val
 
-    @asyncio.coroutine
-    def handle_stderr(self, stream):
+    async def handle_stderr(self, stream):
         while True:
-            line = yield from stream.readline()
+            line = await stream.readline()
             if not line:
                 break
 
-            yield from self.write_message(line)
+            await self.write_message(line)
 
     @staticmethod
     def _send_signal(proc, signame):
@@ -123,8 +120,7 @@ class Watcher(object):
         logger.debug('Sending %s to pid %d', signame, proc.pid)
         proc.send_signal(sig)
 
-    @asyncio.coroutine
-    def run(self, proc):
+    async def run(self, proc):
         io = asyncio.gather(
             self.handle_stdout(proc.stdout),
             self.handle_stderr(proc.stderr),
@@ -135,7 +131,7 @@ class Watcher(object):
             # but shield the IO from cancellation, as we will keep running
             # after sending the SIGINT and waiting for Packer to finish
             # gracefully
-            _, ret = yield from asyncio.gather(asyncio.shield(io),
+            _, ret = await asyncio.gather(asyncio.shield(io),
                                                proc.wait())
         except asyncio.CancelledError:
             self.errors.append('Canceled by signal')
@@ -145,11 +141,11 @@ class Watcher(object):
                 # Cancel everything right away when we receive the second
                 # cancellation (either from the user, or from a timeout from
                 # an outer layer)
-                _, ret = yield from asyncio.gather(io, proc.wait())
+                _, ret = await asyncio.gather(io, proc.wait())
             except asyncio.CancelledError:
                 # Kill the process with prejudice for immediate return.
                 self._send_signal(proc, 'SIGKILL')
-                yield from proc.wait()
+                await proc.wait()
                 raise
 
         if ret != 0:

@@ -3,10 +3,8 @@ import asyncio
 import threading
 import time
 import signal
-try:
-    from asyncio import ensure_future
-except ImportError:
-    ensure_future = getattr(asyncio, 'async')
+
+from asyncio import ensure_future
 
 import pytest
 from shelver.util import AsyncBase, AsyncLoopSupervisor
@@ -27,7 +25,7 @@ def test_async_base_init_explicit(event_loop):
 
 
 @pytest.mark.asyncio
-def test_async_base_delay(event_loop):
+async def test_async_base_delay(event_loop):
     async_obj = AsyncBase(loop=event_loop)
 
     # Run a sleep in the background with delay, get the time in a second
@@ -38,7 +36,7 @@ def test_async_base_delay(event_loop):
 
     f = ensure_future(async_obj.delay(get_time))
     t1 = event_loop.time()
-    t2 = yield from f
+    t2 = await f
 
     # If running get_time() blocked, it would have finished before running the
     # subsequent lines, making t2 >= t1.
@@ -56,12 +54,12 @@ def test_async_loop_supervisor_init(event_loop):
     assert supervisor.timeout == 10
 
 
-def _count_cancellations(timeout, times=1, loop=None):
+async def _count_cancellations(timeout, times=1, loop=None):
     cancel_count = 0
 
     for _ in range(times):
         try:
-            yield from asyncio.sleep(timeout, loop=loop)
+            await asyncio.sleep(timeout, loop=loop)
         except asyncio.CancelledError:
             cancel_count += 1
 
