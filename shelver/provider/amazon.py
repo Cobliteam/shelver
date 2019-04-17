@@ -269,6 +269,15 @@ class AmazonBuilder(Builder):
         })
         return context
 
+    async def _get_build_env(self):
+        env = await super(AmazonBuilder, self)._get_build_env()
+        session = self.registry.provider.session
+        creds = session.get_credentials().get_frozen_credentials()
+        env.update(AWS_ACCESS_KEY_ID=creds.access_key,
+                   AWS_SECRET_ACCESS_KEY=creds.secret_key,
+                   AWS_SESSION_TOKEN=creds.token)
+        return env
+
 
 class AmazonProvider(Provider):
     name = 'amazon'

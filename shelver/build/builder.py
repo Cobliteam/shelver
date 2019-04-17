@@ -105,7 +105,8 @@ class Builder(AsyncBase):
         await archive.get_or_build()
         return archive
 
-    async def get_template_context(self, image, version, archive, base_artifact=None):
+    async def get_template_context(self, image, version, archive,
+                                   base_artifact=None):
         if base_artifact:
             logger.info('Using base artifact: %s', base_artifact)
 
@@ -170,7 +171,7 @@ class Builder(AsyncBase):
         fd, path = await self.delay(
             partial(tempfile.mkstemp, suffix='.json', dir=tmp))
         f = await aiofiles.open(fd, 'w', encoding='utf-8',
-                                     loop=self._loop, executor=self._executor)
+                                loop=self._loop, executor=self._executor)
         try:
             def default(o):
                 if isinstance(o, Mapping) and not isinstance(o, dict):
@@ -195,7 +196,8 @@ class Builder(AsyncBase):
         f = await aiofiles.open(path, mode='ab', loop=self._loop)
         return f
 
-    async def _get_build_cmd(self, image, version, base_artifact=None, logger=logger):
+    async def _get_build_cmd(self, image, version, base_artifact=None,
+                             logger=logger):
         logger.info('Starting build: %s, version %s', image, version)
 
         archive = \
@@ -210,10 +212,15 @@ class Builder(AsyncBase):
         template_path = \
             await self.write_template(packer_data)
 
-        cmd = list(self.packer_cmd) + ['build', '-machine-readable', template_path]
+        cmd = list(self.packer_cmd) + ['build', '-machine-readable',
+                                       template_path]
         return cmd[0], cmd[1:]
 
-    async def run_build(self, image, version, base_artifact=None, msg_stream=None):
+    async def _get_build_env(self):
+        return os.environ.copy()
+
+    async def run_build(self, image, version, base_artifact=None,
+                        msg_stream=None):
         close_stream = False
         if not msg_stream:
             msg_stream = await aiofiles.open(
@@ -224,12 +231,14 @@ class Builder(AsyncBase):
         try:
             log_stream = await self._open_log_file(image.name, version)
             try:
+                env = await self._get_build_env()
                 program, args = await self._get_build_cmd(
                     image, version, base_artifact=base_artifact)
 
                 proc = await asyncio.create_subprocess_exec(
-                    program, *args, stdin=None, stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE, limit=2 ** 32, loop=self._loop)
+                    program, *args, env=env, stdin=None,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    limit=2 ** 32, loop=self._loop)
 
                 watcher = Watcher(image.name, msg_stream, log_stream,
                                   loop=self._loop)
