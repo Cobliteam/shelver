@@ -168,4 +168,5 @@ class Registry(AsyncBase, metaclass=ABCMeta):
             cycles_msg = ', '.join(' <- '.format(dest, srcs)
                                    for dest, srcs in e.cycles.items())
             raise ConfigurationError(
-                'Image dependency graph contains cycles: {}'.format(cycles_msg))
+                'Image dependency graph contains cycles: {}'.format(
+                    cycles_msg))

@@ -21,7 +21,8 @@ from shelver.util import AsyncLoopSupervisor
 
 logger = logging.getLogger('shelver.cli')
 
-ShelverContext = namedtuple('ShelverContext', 'loop provider registry base_dir')
+ShelverContext = namedtuple('ShelverContext',
+                            'loop provider registry base_dir')
 
 
 @click.group()
@@ -89,8 +90,8 @@ def shelver_async_cmd(f):
     '-j', '--max-builds',
     type=click.IntRange(min=0),
     help='Maximum number of builds to run concurrently. Omit or set to 0 to '
-         'run as many builds as allowed by the dependency tree (as base images '
-         'need to be built before those that depend on them)')
+         'run as many builds as allowed by the dependency tree (as base '
+         'images need to be built before those that depend on them)')
 @click.option(
     '--temp-dir', default=Builder.default_tmp_dir('.'),
     type=click.Path(file_okay=False, writable=True, resolve_path=True),
@@ -122,9 +123,10 @@ async def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
     """
     Build and tag images.
 
-    If IMAGES are specified, they will be treated as wildcard patterns filtering
-    which images will be built. Images which are not matched by the patterns,
-    but are base images for others that do will be included implicitly.
+    If IMAGES are specified, they will be treated as wildcard patterns
+    filtering which images will be built. Images which are not matched by the
+    patterns, but are base images for others that do will be included
+    implicitly.
     """
 
     def build_done(image, version, fut):
@@ -245,7 +247,8 @@ async def get_artifact(ctx, image, version, fmt):
     loop, provider, registry, base_dir = ctx.find_object(ShelverContext)
     await registry.load_existing_artifacts()
 
-    artifact = registry.get_image_artifact(image, version=version, default=None)
+    artifact = registry.get_image_artifact(image, version=version,
+                                           default=None)
     if not artifact:
         return 1
 

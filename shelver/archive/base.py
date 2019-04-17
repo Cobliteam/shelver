@@ -83,8 +83,8 @@ class Archive(AsyncBase, metaclass=ABCMeta):
             logger.info('Using cached provision archive: %s', path)
 
             with open(path, 'rb') as f:
-                # Acquire the read lock and release it immediately, just to wait
-                # until a running build finishes
+                # Acquire the read lock and release it immediately, just to
+                # wait until a running build finishes
                 lock = FileLock(f, loop=self._loop, executor=self._executor)
                 await lock.acquire(exclusive=False)
                 lock.release()

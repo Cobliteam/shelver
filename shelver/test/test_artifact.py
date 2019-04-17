@@ -11,8 +11,8 @@ def test_artifact_construct(provider, image):
     with pytest.raises(ValueError):
         TestArtifact('test', provider=provider, image=image, version=None)
 
-    artifact = TestArtifact('test', provider=provider, image=image, version='1',
-                            environment='test')
+    artifact = TestArtifact('test', provider=provider, image=image,
+                            version='1', environment='test')
 
     assert artifact.id == 'test'
     assert artifact.name == image.name

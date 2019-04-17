@@ -29,10 +29,11 @@ async def _run_competing_file_writes(make_lock):
         # Open the temp file two times, so that locks are not shared between
         # coroutines
         with os.fdopen(fd, 'w+b', 0) as f1, open(fname, 'w+b', 0) as f2:
-            # Replace the whole content of the file with data, but write it in a
-            # random fashion, jumping between positions, so that we can observe
-            # any races. If the lock is functioning correctly, the file will end
-            # up as if one of the two pieces of data was written sequentially.
+            # Replace the whole content of the file with data, but write it in
+            # a random fashion, jumping between positions, so that we can
+            # observe any races. If the lock is functioning correctly, the file
+            # will end up as if one of the two pieces of data was written
+            # sequentially.
 
             async def write(lock, data):
                 f = await lock.acquire()
@@ -42,8 +43,8 @@ async def _run_competing_file_writes(make_lock):
                 random.shuffle(positions)
 
                 for i in positions:
-                    # Write one char then yield so that other coroutines can run
-                    # and step over us if the lock is broken.
+                    # Write one char then yield so that other coroutines can
+                    # run and step over us if the lock is broken.
                     f.seek(i)
                     f.write(data[i:i + 1])
                     await asyncio.sleep(0)
