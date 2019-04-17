@@ -1,5 +1,4 @@
 import logging
-import asyncio
 
 from shelver.artifact import Artifact
 from shelver.registry import Registry
@@ -21,8 +20,7 @@ class TestArtifact(Artifact):
 
 
 class TestRegistry(Registry):
-    @asyncio.coroutine
-    def load_artifact_by_id(self, id, region=None, image=None):
+    async def load_artifact_by_id(self, id, region=None, image=None):
         name, version = id.split(':')
         if not image:
             image = self.get_image(name)
@@ -33,14 +31,13 @@ class TestRegistry(Registry):
         self.associate_artifact(artifact, image, version)
         return artifact
 
-    @asyncio.coroutine
-    def load_existing_artifacts(self, region=None):
+    async def load_existing_artifacts(self, region=None):
         pass
 
 
 class TestBuilder(Builder):
-    @asyncio.coroutine
-    def run_build(self, image, version, base_artifact=None, msg_stream=None):
+    async def run_build(self, image, version, base_artifact=None,
+                        msg_stream=None):
         image = self.registry.get_image(image)
         if not version:
             version = image.current_version

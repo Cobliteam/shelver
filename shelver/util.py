@@ -1,12 +1,11 @@
 import subprocess
 import asyncio
+
+from asyncio import ensure_future
+from collections import deque
+from collections.abc import Hashable, Iterable, Mapping, MutableMapping, Set
 from itertools import chain
-from collections import Hashable, Iterable, Mapping, MutableMapping, Set, deque
 from signal import SIGHUP, SIGINT
-try:
-    from asyncio import ensure_future
-except ImportError:
-    from asyncio import async as ensure_future
 
 
 class FrozenDict(Mapping):  # pragma: nocover
@@ -222,17 +221,17 @@ def topological_sort(nodes, edges):
     return result
 
 
-@asyncio.coroutine
-def async_subprocess_run(program, *args, input=None, stdout=subprocess.PIPE,
-                         stderr=None, loop=None, limit=None, **kwargs):
+async def async_subprocess_run(program, *args, input=None,
+                               stdout=subprocess.PIPE, stderr=None, loop=None,
+                               limit=None, **kwargs):
     loop = loop or asyncio.get_event_loop()
     cmd = [program] + list(args)
 
     limit = limit or 2 ** 32
-    proc = yield from asyncio.create_subprocess_exec(
+    proc = await asyncio.create_subprocess_exec(
         *cmd, stdout=stdout, stderr=stderr, loop=loop, limit=limit, **kwargs)
-    out, err = yield from proc.communicate(input)
-    ret = yield from proc.wait()
+    out, err = await proc.communicate(input)
+    ret = await proc.wait()
 
     if ret != 0:
         exc = subprocess.CalledProcessError(ret, cmd, output=out)

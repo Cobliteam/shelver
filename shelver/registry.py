@@ -1,4 +1,3 @@
-import asyncio
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 
@@ -108,13 +107,11 @@ class Registry(AsyncBase, metaclass=ABCMeta):
         return self
 
     @abstractmethod
-    @asyncio.coroutine
-    def load_existing_artifacts(self, region=None):
+    async def load_existing_artifacts(self, region=None):
         pass
 
     @abstractmethod
-    @asyncio.coroutine
-    def load_artifact_by_id(self, id, region=None, image=None):
+    async def load_artifact_by_id(self, id, region=None, image=None):
         pass
 
     def get_image_artifact(self, image, version=None,
