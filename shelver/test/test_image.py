@@ -16,27 +16,27 @@ def test_image_from_dict_defaults():
     assert img.provision is None
     assert isinstance(img.metadata, Sequence)
     assert isinstance(img.archive, Mapping)
-    assert isinstance(img.builder_opts, Mapping)
+    assert isinstance(img.packer_builder_overrides, Mapping)
 
 
 def test_image_from_dict_overrides():
     img = Image.from_dict(
         {'name': 'test', 'current_version': '1',
          'description': 'override desc'},
-        defaults={'builder_opts': {'some-option': 'some-value'},
+        defaults={'packer_builder_overrides': {'some-option': 'some-value'},
                   'description': 'default desc',
                   'base': 'some-base'})
     assert img.name == 'test'
     assert img.current_version == '1'
     assert img.description == 'override desc'
-    assert img.builder_opts['some-option'] == 'some-value'
+    assert img.packer_builder_overrides['some-option'] == 'some-value'
 
 
 def test_image_from_dict_invalid_defaults():
     with pytest.raises((TypeError, ValueError)):
         Image.from_dict(
             {'name': 'test', 'version': '1'},
-            defaults={'builder_opts': 'bad-string'})
+            defaults={'packer_builder_overrides': 'bad-string'})
 
 
 def test_image_parse_config_invalid():
@@ -63,7 +63,7 @@ def test_image_parse_config(images, example_config):
 
 def test_image_parse_config_with_defaults(images, example_config):
     config = example_config.copy()
-    config['defaults'] = {'builder_opts': {'hello': 'world'}}
+    config['defaults'] = {'packer_builder_overrides': {'hello': 'world'}}
 
     parsed_images = Image.parse_config(config)
     assert parsed_images.keys() == images.keys()

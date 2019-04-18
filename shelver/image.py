@@ -8,7 +8,8 @@ class Image(namedtuple('Image', 'name current_version environment description '
                                 'template_path base '
                                 'archive provision '
                                 'instance_type metadata '
-                                'builder_opts')):
+                                'provider_options '
+                                'packer_builder_overrides')):
     __slots__ = ()
 
     DEFAULTS = {
@@ -19,8 +20,9 @@ class Image(namedtuple('Image', 'name current_version environment description '
         'base': None,
         'metadata': [],
         'provision': None,
-        'builder_opts': {},
-        'instance_type': None
+        'instance_type': None,
+        'provider_options': {},
+        'packer_builder_overrides': {},
     }
 
     @classmethod

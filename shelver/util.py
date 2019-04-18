@@ -1,5 +1,6 @@
-import subprocess
 import asyncio
+import json
+import subprocess
 
 from asyncio import ensure_future
 from collections import deque
@@ -36,6 +37,14 @@ class FrozenDict(Mapping):  # pragma: nocover
             return self._data == other._data
         elif isinstance(other, Mapping):
             return self._data == other
+
+
+class JSONEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, FrozenDict):
+            return dict(o)
+
+        return super(JSONEncoder, self).default(o)
 
 
 class AsyncBase:

@@ -1,8 +1,11 @@
-import os
-import logging
-import json
-import tempfile
+import datetime
 import gzip
+import json
+import logging
+import os
+import re
+import tempfile
+
 from collections import Mapping
 from functools import partial, lru_cache
 
@@ -10,12 +13,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from boto3.session import Session
-from botocore.client import ClientError
+from botocore.exceptions import ClientError, WaiterError
+
 from shelver.registry import Registry
 from shelver.artifact import Artifact
 from shelver.build import Builder
 from shelver.errors import ConfigurationError
-from shelver.util import wrap_as_coll, is_collection
+from shelver.util import JSONEncoder, wrap_as_coll, is_collection
 from .base import Provider
 
 
@@ -130,11 +134,141 @@ class AmazonRegistry(Registry):
         return self
 
 
+def change_set_response_up_to_date(response):
+    status = response["Status"]
+
+    if status == "FAILED":
+        status_reason = response["StatusReason"]
+        if ("didn't contain changes" in status_reason or
+                "No updates are to be performed" in status_reason):
+            return True
+
+    return False
+
+
+def deploy_cloudformation_stack(session, stack_name, template,
+                                parameters=None, capabilities=None,
+                                tags=None):
+    cfn = session.client('cloudformation')
+
+    if not isinstance(template, str):
+        template = json.dumps(template, cls=JSONEncoder)
+
+    cfn.validate_template(TemplateBody=template)
+
+    tags = tags or {}
+    stack_tags = [dict(Key=key, Value=value) for (key, value) in tags.items()]
+
+    now = datetime.datetime.utcnow()
+    date_str = now.strftime('%Y%m%d%H%M%S')
+    change_set_name = '{}-{}'.format(stack_name, date_str)
+
+    stack_capabilities = set(capabilities or [])
+    stack_parameters = {}
+
+    try:
+        response = cfn.describe_stacks(StackName=stack_name)
+        stack = response['Stacks'][0]
+
+        stack_capabilities.update(stack['Capabilities'])
+
+        for param in stack['Parameters']:
+            key = param['ParameterKey']
+            stack_parameters[key] = dict(ParameterKey=key,
+                                         UsePreviousValue=True)
+
+        execute_waiter = cfn.get_waiter('stack_update_complete')
+        change_set_type = 'UPDATE'
+    except ClientError as err:
+        if err.response['Error']['Code'] == 'ValidationError' \
+                and 'does not exist' in err.response['Error']['Message']:
+            execute_waiter = cfn.get_waiter('stack_create_complete')
+            change_set_type = 'CREATE'
+        else:
+            raise
+
+    for key, override in parameters.items():
+        stack_parameters[key] = dict(ParameterKey=key,
+                                     ParameterValue=override)
+
+    change_set = cfn.create_change_set(
+        ChangeSetName=change_set_name,
+        ChangeSetType=change_set_type,
+        StackName=stack_name,
+        TemplateBody=template,
+        Parameters=list(stack_parameters.values()),
+        Tags=stack_tags,
+        Capabilities=list(stack_capabilities))
+
+    up_to_date = False
+    try:
+        cfn.get_waiter('change_set_create_complete').wait(
+            ChangeSetName=change_set['Id'],
+            StackName=change_set['StackId'])
+    except WaiterError as err:
+        response = err.last_response
+        if not change_set_response_up_to_date(response):
+            raise
+
+        up_to_date = True
+
+    if not up_to_date:
+        cfn.execute_change_set(
+            ChangeSetName=change_set['Id'],
+            StackName=change_set['StackId'])
+
+        execute_waiter.wait(StackName=change_set['StackId'])
+
+    response = cfn.describe_stacks(StackName=stack_name)
+    stack = response['Stacks'][0]
+    return stack
+
+
+instance_profile_template = """
+AWSTemplateFormatVersion: "2010-09-09"
+Parameters:
+  PolicyDocument:
+    Type: String
+Outputs:
+  RoleName:
+    Value: !Ref "PackerBuildRole"
+  RoleArn:
+    Value: !GetAtt ["PackerBuildRole", "Arn"]
+  InstanceProfileName:
+    Value: !Ref "PackerBuildInstanceProfile"
+  InstanceProfileArn:
+    Value: !GetAtt ["PackerBuildInstanceProfile", "Arn"]
+Resources:
+  PackerBuildRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: "PackerBuild"
+          PolicyDocument: !Sub "${PolicyDocument}"
+  PackerBuildInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: "/"
+      Roles:
+        - Ref: "PackerBuildRole"
+"""
+
+
 class AmazonBuilder(Builder):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._instance_profile = None
+        self._instance_profile_arn = None
 
     def find_running_build(self, image, version):
         ec2 = self.registry.provider.aws('ec2')
@@ -152,62 +286,47 @@ class AmazonBuilder(Builder):
 
         return None
 
-    def _create_instance_profile(self):
-        prof_name = 'PackerBuild'
-        role_name = 'PackerBuild'
-        policy_name = 'PackerBuild'
+    def _create_instance_profile(self, name, policy_document):
+        if isinstance(policy_document, (bytes, str)):
+            pass
+        elif isinstance(policy_document, Mapping):
+            policy_document = json.dumps(
+                policy_document, sort_keys=True, cls=JSONEncoder)
+        else:
+            raise ValueError(
+                'Policy document must be a string or dict, not {}'.format(
+                    type(policy_document)))
 
-        iam = self.registry.provider.aws('iam')
-        try:
-            profile = iam.get_instance_profile(InstanceProfileName=prof_name)
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchEntity':
-                profile = None
-            else:
-                raise
+        session = self.registry.provider.session
+        clean_name = re.sub(r'[^a-zA-Z0-9-]+', '-', name)
 
-        if not profile:
-            profile = iam.create_instance_profile(
-                InstanceProfileName=prof_name)
+        stack = deploy_cloudformation_stack(
+            session,
+            stack_name='packer-{}-instance-profile'.format(clean_name),
+            template=instance_profile_template,
+            parameters=dict(PolicyDocument=policy_document),
+            capabilities=["CAPABILITY_NAMED_IAM"])
 
-            iam.create_role(
-                RoleName=role_name,
-                AssumeRolePolicyDocument=json.dumps({
-                  "Version": "2012-10-17",
-                  "Statement": {
-                    "Effect": "Allow",
-                    "Principal": {"Service": "ec2.amazonaws.com"},
-                    "Action": "sts:AssumeRole"
-                  }
-                }))
-            iam.put_role_policy(
-                RoleName=role_name,
-                PolicyName=policy_name,
-                PolicyDocument=json.dumps({
-                   "Version": "2012-10-17",
-                   "Statement": [{
-                      "Effect": "Allow",
-                      "Action": [
-                         "ec2:DescribeInstances",
-                         "ec2:DescribeImages",
-                         "ec2:DescribeTags",
-                         "ec2:DescribeSnapshots"
-                      ],
-                      "Resource": "*"
-                   }]
-                }))
-            iam.add_role_to_instance_profile(
-                InstanceProfileName=prof_name,
-                RoleName=role_name)
+        arn_output_name = 'InstanceProfileArn'
+        for output in stack['Outputs']:
+            if output['OutputKey'] == arn_output_name:
+                arn = output['OutputValue']
+                return arn
 
-        return profile['InstanceProfile']['InstanceProfileName']
+        raise RuntimeError(
+            'Expected output {} not present in stack {}'.format(
+                arn_output_name, stack['StackName']))
 
-    async def get_instance_profile(self):
-        if not self._instance_profile:
-            prof = await self.delay(self._create_instance_profile)
-            self._instance_profile = prof
+    async def get_instance_profile_arn(self, image):
+        opts = image.provider_options.get('instance_profile', {})
+        arn = opts.get('arn')
+        if not arn:
+            policy_doc = opts.get('policy_document')
+            if policy_doc:
+                arn = await self.delay(self._create_instance_profile,
+                                       image.name, policy_doc)
 
-        return self._instance_profile
+        return arn
 
     def _guess_userdata_type(self, data):
         mime_types = {
@@ -239,7 +358,7 @@ class AmazonBuilder(Builder):
 
     async def get_user_data_file(self, image):
         if not image.metadata:
-            return ''
+            return None
 
         tmp = await self.get_build_tmp_dir()
         fd, path = await self.delay(
@@ -256,19 +375,6 @@ class AmazonBuilder(Builder):
 
         return path
 
-    async def get_template_context(self, image, version, archive, **kwargs):
-        context = await super().get_template_context(
-            image, version, archive, **kwargs)
-
-        data_file = await self.get_user_data_file(image)
-        prof = await self.get_instance_profile()
-
-        context.update({
-            'aws_user_data_file': data_file,
-            'aws_instance_profile': prof
-        })
-        return context
-
     async def _get_build_env(self):
         env = await super(AmazonBuilder, self)._get_build_env()
         session = self.registry.provider.session
@@ -277,6 +383,20 @@ class AmazonBuilder(Builder):
                    AWS_SECRET_ACCESS_KEY=creds.secret_key,
                    AWS_SESSION_TOKEN=creds.token)
         return env
+
+    async def post_process_template(self, data, image):
+        data = \
+            await super(AmazonBuilder, self).post_process_template(data, image)
+
+        user_data_file = await self.get_user_data_file(image)
+        profile_arn = await self.get_instance_profile_arn(image)
+        _, profile_name = profile_arn.rsplit('/', 1)
+        overrides = dict(
+            user_data_file=user_data_file,
+            iam_instance_profile=profile_name
+        )
+
+        return self._apply_builder_overrides(data, overrides)
 
 
 class AmazonProvider(Provider):
@@ -294,6 +414,8 @@ class AmazonProvider(Provider):
         if region:
             config = config.copy()
             config['region_name'] = region
+
+        self.instance_profile = config.pop('instance_profile', {})
 
         self._session = Session(**config)
         self.region = self._session.region_name

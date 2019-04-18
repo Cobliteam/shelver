@@ -92,9 +92,9 @@ class Coordinator(AsyncBase):
                 artifact = await self.registry.load_artifact_by_id(
                     id, region=region)
                 artifacts.append(artifact)
-            except (KeyError, ValueError) as e:
-                logger.warn('Failed to register created artifact: %s',
-                            result)
+            except (KeyError, ValueError):
+                logger.exception('Failed to register created artifact: %s',
+                                 result)
 
         return artifacts
 

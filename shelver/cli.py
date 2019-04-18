@@ -117,9 +117,13 @@ def shelver_async_cmd(f):
          'the executable path, separated by spaces and quotes according to '
          'shell rules (but NOT actually interpreted by a shell, i.e. variable '
          'expansion is not possible)')
+@click.option(
+    '--packer-build-args', default='',
+    type=shlex.split,
+    help='Arguments to pass to `packer build`')
 @shelver_async_cmd
 async def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
-                clean_temp_dir, packer_cmd):
+                clean_temp_dir, packer_cmd, packer_build_args):
     """
     Build and tag images.
 
@@ -153,7 +157,8 @@ async def build(ctx, image_patterns, max_builds, temp_dir, cache_dir, log_dir,
         cache_dir=cache_dir,
         log_dir=log_dir,
         keep_tmp=not clean_temp_dir,
-        packer_cmd=packer_cmd)
+        packer_cmd=packer_cmd,
+        packer_build_args=packer_build_args)
 
     with builder:
         await registry.load_existing_artifacts()

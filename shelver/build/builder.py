@@ -15,7 +15,7 @@ import aiofiles
 from jinja2 import Template
 
 from shelver.archive import Archive
-from shelver.util import AsyncBase, deep_merge, is_collection
+from shelver.util import AsyncBase, JSONEncoder, deep_merge, is_collection
 from shelver.errors import ConfigurationError
 from .coordinator import Coordinator
 from .watcher import Watcher
@@ -39,7 +39,8 @@ class Builder(AsyncBase):
         return os.path.join(base_dir, cls.LOCAL_DIR_PREFIX, 'cache')
 
     def __init__(self, registry, base_dir, *, tmp_dir=None, cache_dir=None,
-                 log_dir=None, keep_tmp=True, packer_cmd='packer', **kwargs):
+                 log_dir=None, keep_tmp=True, packer_cmd='packer',
+                 packer_build_args=(), **kwargs):
 
         super().__init__(**kwargs)
 
@@ -57,6 +58,7 @@ class Builder(AsyncBase):
         self.log_dir = log_dir
         self.keep_tmp = bool(keep_tmp)
         self.packer_cmd = packer_cmd
+        self.packer_build_args = packer_build_args
 
         self._build_tmp_dir = None
 
@@ -110,7 +112,7 @@ class Builder(AsyncBase):
         if base_artifact:
             logger.info('Using base artifact: %s', base_artifact)
 
-        archive_path = await archive.get_or_build()
+        await archive.get_or_build()
 
         # Prepare packer template
         context = {
@@ -149,14 +151,22 @@ class Builder(AsyncBase):
         finally:
             await f.close()
 
-    def post_process_template(self, data, image):
+    def _apply_builder_overrides(self, data, overrides):
         try:
             data['builders'] = list(map(
-                lambda d: deep_merge(d, image.builder_opts),
+                lambda d: deep_merge(d, overrides),
                 data['builders']))
-            return data
-        except KeyError:
+        except KeyError as err:
+            if err.args[0] != 'builders':
+                raise
+
             raise ConfigurationError('No builders found in template')
+
+        return data
+
+    async def post_process_template(self, data, image):
+        return self._apply_builder_overrides(
+            data, image.packer_builder_overrides)
 
     @staticmethod
     def _create_tmp_file(*args, mode='wb', **kwargs):
@@ -173,13 +183,7 @@ class Builder(AsyncBase):
         f = await aiofiles.open(fd, 'w', encoding='utf-8',
                                 loop=self._loop, executor=self._executor)
         try:
-            def default(o):
-                if isinstance(o, Mapping) and not isinstance(o, dict):
-                    return dict(o)
-
-                raise TypeError
-
-            content = json.dumps(data, default=default, indent=2)
+            content = json.dumps(data, cls=JSONEncoder, indent=2)
             logger.debug('Generated packer template: \n%s', content)
 
             await f.write(content)
@@ -208,12 +212,13 @@ class Builder(AsyncBase):
         packer_data = \
             await self.load_template(image.template_path, context)
         packer_data = \
-            self.post_process_template(packer_data, image)
+            await self.post_process_template(packer_data, image)
         template_path = \
             await self.write_template(packer_data)
 
-        cmd = list(self.packer_cmd) + ['build', '-machine-readable',
-                                       template_path]
+        cmd = [*self.packer_cmd, 'build', '-machine-readable',
+               *self.packer_build_args, template_path]
+        logger.debug('Packer command: {}'.format(cmd))
         return cmd[0], cmd[1:]
 
     async def _get_build_env(self):
