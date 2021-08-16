@@ -7,7 +7,7 @@ install_requires = [
     'Jinja2',
     'boto3',
     'aiofiles',
-    'click',
+    'click<8',
 ]
 
 extras_require = {
