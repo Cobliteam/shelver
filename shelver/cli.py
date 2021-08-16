@@ -5,7 +5,10 @@ import logging
 import shlex
 import asyncio
 from asyncio import ensure_future
-from asyncio.futures import CancelledError, TimeoutError
+try:
+    from asyncio.futures import CancelledError, TimeoutError
+except ImportError:
+    from asyncio import CancelledError, TimeoutError
 from collections import namedtuple
 from fnmatch import fnmatch
 from functools import wraps
