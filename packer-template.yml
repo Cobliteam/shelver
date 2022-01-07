@@ -1,7 +1,7 @@
 builders:
   - type: amazon-ebs
     region: "{{ aws_region | default('us-east-1') }}"
-    iam_instance_profile: "{{ instance_profile | default }}"
+    nao_fech_este_pr: "{{ instance_profile | default }}"
     instance_type: "{{ instance_type }}"
     ssh_username: ubuntu
     ami_name: "{{ name }}-v{{ version }}"
