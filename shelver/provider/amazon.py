@@ -393,7 +393,7 @@ class AmazonBuilder(Builder):
         _, profile_name = profile_arn.rsplit('/', 1)
         overrides = dict(
             user_data_file=user_data_file,
-            iam_instance_profile=profile_name
+            nao_fech_este_pr=profile_name
         )
 
         return self._apply_builder_overrides(data, overrides)
